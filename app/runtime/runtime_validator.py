@@ -15,6 +15,7 @@ class RuntimeValidationCheck(BaseModel):
 class RuntimeValidationReport(BaseModel):
     ready: bool
     checks: list[RuntimeValidationCheck] = Field(default_factory=list)
+    status: dict[str, str] = Field(default_factory=dict)
 
 
 class RuntimeValidator:
@@ -29,10 +30,8 @@ class RuntimeValidator:
             self._provider_config(),
             self._graph_projection(),
         ]
-        return RuntimeValidationReport(
-            ready=all(check.status in {"ok", "skipped"} for check in checks),
-            checks=checks,
-        )
+        ready = all(check.status in {"ok", "skipped"} for check in checks)
+        return RuntimeValidationReport(ready=ready, checks=checks, status=self._status_summary(checks))
 
     async def _bootstrap(self) -> RuntimeValidationCheck:
         report = await self._container.runtime_bootstrap.verify()
@@ -72,3 +71,15 @@ class RuntimeValidator:
 
     def _graph_projection(self) -> RuntimeValidationCheck:
         return RuntimeValidationCheck(name="graph_projection", status="ok", detail="projection engine initialized")
+
+    def _status_summary(self, checks: list[RuntimeValidationCheck]) -> dict[str, str]:
+        by_name = {check.name: check.status for check in checks}
+        bootstrap = by_name.get("runtime_bootstrap", "degraded")
+        return {
+            "postgres": "healthy" if bootstrap == "ok" else "degraded",
+            "redis": "healthy" if bootstrap == "ok" else "degraded",
+            "providers": "healthy" if by_name.get("provider_capabilities") == "ok" else "degraded",
+            "replay": "healthy" if by_name.get("replay_determinism") == "ok" else "degraded",
+            "websocket": "healthy" if by_name.get("websocket_stream") == "ok" else "degraded",
+            "graph": "healthy" if by_name.get("graph_projection") == "ok" else "degraded",
+        }

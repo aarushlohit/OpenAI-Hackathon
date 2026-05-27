@@ -10,6 +10,7 @@ class PostgresGraphProjectionRepository(GraphRepository):
         self._runner = runner
 
     async def save_projection(self, projection: ThreatGraphProjection) -> None:
+        payload = projection.model_dump(mode="json")
         await self._runner.execute(
             """
             INSERT INTO graph_projections (investigation_id, projection_payload, projection_hash)
@@ -21,7 +22,7 @@ class PostgresGraphProjectionRepository(GraphRepository):
             """,
             {
                 "investigation_id": projection.investigation_id,
-                "projection_payload": projection.model_dump(mode="json"),
+                "projection_payload": payload,
                 "projection_hash": sha256(projection.model_dump_json().encode("utf-8")).hexdigest(),
             },
         )
@@ -61,3 +62,4 @@ class PostgresGraphProjectionRepository(GraphRepository):
         if isinstance(payload, dict):
             return ThreatGraphProjection.model_validate(payload)
         return ThreatGraphProjection.model_validate_json(payload)
+

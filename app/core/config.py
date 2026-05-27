@@ -19,9 +19,9 @@ class Settings(BaseSettings):
 
     nvidia_nim_api_key: SecretStr | None = None
     nvidia_nim_base_url: AnyUrl = "https://integrate.api.nvidia.com/v1"
-    nvidia_nim_text_model: str = "google/gemma-3n-e2b-it"
-    nvidia_nim_vision_model: str = "google/gemma-3n-e2b-it"
-    nvidia_nim_audio_model: str = "google/gemma-3n-e2b-it"
+    nvidia_nim_text_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    nvidia_nim_vision_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    nvidia_nim_audio_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 
     pollinations_base_url: AnyUrl = "https://text.pollinations.ai"
     pollinations_chat_url: AnyUrl = "https://gen.pollinations.ai/v1/chat/completions"
@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     provider_circuit_failure_threshold: int = Field(default=3, ge=1, le=20)
     provider_circuit_recovery_seconds: int = Field(default=60, ge=5, le=3600)
     event_stream_buffer_size: int = Field(default=500, ge=10, le=10_000)
+    runtime_enable_redis_client: bool = False
 
 
 @lru_cache

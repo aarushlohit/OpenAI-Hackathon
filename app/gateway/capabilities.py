@@ -14,6 +14,8 @@ class ProviderCapability(BaseModel):
     provider: str = Field(min_length=1)
     modalities: set[ProviderModality] = Field(default_factory=set)
     streaming: bool = False
+    reasoning: bool = False
+    multimodal: bool = False
 
 
 class ProviderCapabilityRegistry:
@@ -67,6 +69,8 @@ def default_capability_registry() -> ProviderCapabilityRegistry:
             provider="nvidia_nim",
             modalities={ProviderModality.TEXT, ProviderModality.VISION, ProviderModality.AUDIO},
             streaming=True,
+            reasoning=True,
+            multimodal=True,
         )
     )
     registry.register(

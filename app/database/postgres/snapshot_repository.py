@@ -31,30 +31,3 @@ class PostgresSnapshotRepository:
             },
         )
 
-    async def latest(self, investigation_id: str) -> ReplaySnapshot | None:
-        result = await self._runner.execute(
-            """
-            SELECT snapshot_payload
-            FROM replay_snapshots
-            WHERE investigation_id = :investigation_id
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            {"investigation_id": investigation_id},
-        )
-        rows = self._rows(result)
-        if not rows:
-            return None
-        payload = rows[0]["snapshot_payload"] if isinstance(rows[0], dict) else rows[0][0]
-        if isinstance(payload, dict):
-            return ReplaySnapshot.model_validate(payload)
-        return ReplaySnapshot.model_validate_json(payload)
-
-    def _rows(self, result) -> list:
-        if result is None:
-            return []
-        if hasattr(result, "mappings"):
-            return list(result.mappings().all())
-        if hasattr(result, "all"):
-            return list(result.all())
-        return list(result)

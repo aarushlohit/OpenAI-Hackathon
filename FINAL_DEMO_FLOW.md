@@ -21,3 +21,23 @@ Expected runtime sequence:
 
 Demo mode uses normal events and replay-safe frames. It does not patch production verdicts.
 
+MVP demo command:
+
+```bash
+./scripts/demo_mode.sh telegram_onboarding_scam
+```
+
+Final cinematic scenario:
+
+```text
+Telegram recruiter asks for refundable onboarding payment, provides UPI pay@upi,
+uses @careerfastjob, and links career-fasttrack-placement.xyz.
+```
+
+Expected:
+
+- urgency and scarcity detection.
+- graph node growth for domain, Telegram handle, and UPI.
+- payment-method relationship edge.
+- HIGH RISK verdict.
+- replay reconstruction.

@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -18,7 +19,7 @@ class RedisRuntime:
         if self._client is None:
             return RedisRuntimeStatus(reachable=False, detail="Redis client is not configured")
         try:
-            await self._client.ping()
+            await asyncio.wait_for(self._client.ping(), timeout=2)
         except Exception as exc:
             return RedisRuntimeStatus(reachable=False, detail=str(exc))
         return RedisRuntimeStatus(reachable=True)
@@ -29,6 +30,15 @@ class RedisRuntime:
             return 0
         published = await self._client.publish(channel, payload)
         return int(published or 0)
+
+    async def close(self) -> None:
+        if self._client is None:
+            return
+        close = getattr(self._client, "aclose", None) or getattr(self._client, "close", None)
+        if close is not None:
+            result = close()
+            if hasattr(result, "__await__"):
+                await result
 
     async def subscribe(self, channel: str) -> AsyncIterator[str]:
         self._require_safe_channel(channel)
@@ -53,4 +63,3 @@ class RedisRuntime:
             raise ValueError("Redis channels must use the hermes namespace")
         if any(character.isspace() for character in channel):
             raise ValueError("Redis channels may not contain whitespace")
-

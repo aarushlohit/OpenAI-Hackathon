@@ -80,3 +80,20 @@ Phase 10 operational activation:
 - Added websocket schema and trace enrichment for live clients.
 - Added final runtime validation script and failure simulation scaffolding.
 - Added final docs for multimodal routing, demo flow, provider failover, provider setup, Docker boot, runtime validation, and operational playbook.
+
+Final Flutter runtime integration:
+
+- Added Riverpod-backed live investigation console connected to REST and websocket correlation IDs.
+- Added runtime health dashboard, trace-aware timeline rendering, replay console, evidence intake panel, live threat feed, and animated threat graph panel.
+- Added Flutter packages for websocket state, routing, Dio, graph rendering, animation, file picking, image picking, and future generated models.
+- Added `POST /v1/investigate` compatibility route for UI and demo flows.
+- Updated README with runtime architecture, replay model, Docker boot, websocket flow, provider failover, and demo investigation instructions.
+
+Final MVP ship mode:
+
+- Added startup scripts for development bootstrap, one-command MVP launch, deterministic demo presets, runtime reset, and live provider validation.
+- Added Flutter MVP status splash with runtime bootstrap checks before the SOC dashboard.
+- Added reusable Flutter investigation presets for Telegram onboarding, fake portals, forged offers, recruiter impersonation, and coordinated campaigns.
+- Added Docker restart policies and internal-only data service ports for safer local boot.
+- Added MVP quickstart and live runtime guide documents.
+- Live provider validation confirmed NVIDIA NIM Gemma 3n connectivity; Pollinations endpoints returned HTTP 403 in this environment and remain configured as degraded emergency fallback.

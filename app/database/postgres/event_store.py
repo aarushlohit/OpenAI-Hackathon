@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.database.postgres.sql_runner import AsyncSqlRunner
 from app.events.models import EventEnvelope
@@ -88,13 +88,3 @@ class PostgresEventStore:
         if isinstance(payload, dict):
             return EventEnvelope.model_validate(payload)
         return EventEnvelope.model_validate_json(payload)
-
-
-class EventStoreHealth(BaseModel):
-    reachable: bool
-    latency_ms: int = Field(default=0, ge=0)
-    detail: str = ""
-
-    @classmethod
-    def unavailable(cls, detail: str) -> "EventStoreHealth":
-        return cls(reachable=False, detail=detail)

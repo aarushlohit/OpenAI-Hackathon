@@ -50,3 +50,10 @@ Phase 10 hardening:
 - Provider secrets remain in settings and are never exposed to agents or websocket clients.
 - Websocket payloads carry trace context for replay and spoof investigation.
 - Final validation can run in strict mode during deployment gates.
+
+MVP ship-mode hardening:
+
+- Reset scripts preserve volumes by default and require `CONFIRM_RESET=YES` for destructive volume removal.
+- Live provider validation masks secrets and prints only provider status.
+- Flutter remains a presentation layer and never receives provider keys.
+- Runtime startup scripts validate configuration without embedding secrets.

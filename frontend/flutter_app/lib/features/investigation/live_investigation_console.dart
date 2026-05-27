@@ -6,7 +6,7 @@ import '../../timeline/replay_controls.dart';
 import '../../timeline/timeline_panel.dart';
 import '../../widgets/status_chip.dart';
 import 'investigation_controller.dart';
-import 'investigation_state.dart';
+import 'investigation_presets.dart';
 
 class LiveInvestigationConsole extends ConsumerStatefulWidget {
   const LiveInvestigationConsole({super.key});
@@ -57,6 +57,21 @@ class _LiveInvestigationConsoleState extends ConsumerState<LiveInvestigationCons
             const SizedBox(height: 10),
             Row(
               children: [
+                DropdownButton<InvestigationPreset>(
+                  value: investigationPresets.firstWhere(
+                    (preset) => preset.input == _controller.text,
+                    orElse: () => investigationPresets.first,
+                  ),
+                  items: investigationPresets
+                      .map((preset) => DropdownMenuItem(value: preset, child: Text(preset.name)))
+                      .toList(),
+                  onChanged: (preset) {
+                    if (preset != null) {
+                      setState(() => _controller.text = preset.input);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () => ref.read(investigationControllerProvider.notifier).start(_controller.text),
                   icon: const Icon(Icons.radar),
@@ -81,4 +96,3 @@ class _LiveInvestigationConsoleState extends ConsumerState<LiveInvestigationCons
     );
   }
 }
-

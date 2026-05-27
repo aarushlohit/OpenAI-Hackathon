@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'dashboard/dashboard_screen.dart';
+import 'features/runtime/mvp_status_screen.dart';
 import 'theme/hermes_theme.dart';
 
 void main() {
-  runApp(const HermesApp());
+  runApp(const ProviderScope(child: HermesApp()));
 }
 
 class HermesApp extends StatelessWidget {
@@ -16,8 +17,7 @@ class HermesApp extends StatelessWidget {
       title: 'Hermes-X',
       debugShowCheckedModeBanner: false,
       theme: HermesTheme.dark(),
-      home: const DashboardScreen(),
+      home: const MvpStatusScreen(),
     );
   }
 }
-

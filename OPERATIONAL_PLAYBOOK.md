@@ -6,6 +6,12 @@ Local activation:
 docker compose up --build
 ```
 
+MVP launcher:
+
+```bash
+./scripts/start_hermes.sh
+```
+
 Runtime validation:
 
 ```bash
@@ -24,6 +30,16 @@ CLI investigation:
 python hermes.py investigate "Join Telegram @fakehr and pay refundable deposit to pay@upi"
 ```
 
+Demo presets:
+
+```bash
+./scripts/demo_mode.sh telegram_onboarding_scam
+./scripts/demo_mode.sh fake_internship_portal
+./scripts/demo_mode.sh forged_offer_letter
+./scripts/demo_mode.sh recruiter_impersonation
+./scripts/demo_mode.sh coordinated_campaign
+```
+
 Operational checks:
 
 - `/v1/runtime/health`
@@ -35,4 +51,3 @@ Operational checks:
 Failure rule:
 
 If Redis is down, realtime fanout degrades. If PostgreSQL is down in production, readiness must fail. Historical events are never rewritten to recover state.
-

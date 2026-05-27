@@ -28,7 +28,7 @@ class ThreatGraphPanel extends ConsumerWidget {
           (event) => ThreatGraphEdge(
             source: event.payload['source']?.toString() ?? '',
             target: event.payload['target']?.toString() ?? '',
-            kind: event.payload['kind']?.toString() ?? 'linked_to',
+            relation: event.payload['kind']?.toString() ?? 'linked_to',
           ),
         )
         .toList();

@@ -12,7 +12,7 @@ class CampaignPanel extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            const Icon(Icons.hub),
+            const Icon(Icons.hub, color: Color(0xFF22D3EE)),
             const SizedBox(width: 8),
             Text('Active Threat Campaigns: $activeCampaigns'),
           ],
@@ -21,4 +21,3 @@ class CampaignPanel extends StatelessWidget {
     );
   }
 }
-

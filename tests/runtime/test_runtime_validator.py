@@ -6,7 +6,9 @@ from app.runtime.runtime_validator import RuntimeValidator
 
 class RuntimeValidatorTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_validator_reports_core_checks(self) -> None:
-        report = await RuntimeValidator(AppContainer()).validate()
+        container = AppContainer()
+        report = await RuntimeValidator(container).validate()
+        await container.redis_runtime.close()
 
         names = {check.name for check in report.checks}
         self.assertIn("provider_capabilities", names)

@@ -74,3 +74,4 @@ class PostgresInvestigationRepository(InvestigationRepository):
         if hasattr(result, "all"):
             return list(result.all())
         return list(result)
+

@@ -12,7 +12,7 @@ class ProviderStatusPanel extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            const Icon(Icons.dns),
+            const Icon(Icons.dns, color: Color(0xFF10B981)),
             const SizedBox(width: 8),
             Text('Provider Infrastructure: $status'),
           ],
@@ -21,4 +21,3 @@ class ProviderStatusPanel extends StatelessWidget {
     );
   }
 }
-

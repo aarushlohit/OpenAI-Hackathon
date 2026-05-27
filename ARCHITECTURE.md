@@ -52,7 +52,7 @@ Phase 8.5 adds deterministic replay snapshots, trace context, runtime health API
 
 Phase 9 adds infrastructure convergence: PostgreSQL adapters for append-only events, investigations, snapshots, replay history, dead letters, and graph projections; Redis runtime primitives for websocket fanout and bounded realtime coordination; bootstrap readiness checks; provider HTTP normalization; and Docker orchestration for the API, Redis, PostgreSQL, optional Neo4j, and frontend development runtime.
 
-Phase 10 adds operational activation: provider capability registry, environment-driven multimodal routing, NVIDIA Gemma 3n fallback defaults, Pollinations OpenAI-compatible fallback, websocket schema/trace enrichment, final runtime validation, and failure simulation scaffolding for demo readiness.
+Phase 10 adds operational activation: provider capability registry, environment-driven multimodal routing, NVIDIA Nemotron Omni fallback defaults, Pollinations OpenAI-compatible fallback, websocket schema/trace enrichment, final runtime validation, and failure simulation scaffolding for demo readiness.
 
 Dependency rule:
 
@@ -60,7 +60,7 @@ Transport layers depend inward on use cases. Agents depend on gateway abstractio
 
 Provider routing:
 
-- Text: OpenAI, NVIDIA Gemma 3n, Pollinations emergency fallback.
-- Vision: OpenAI Vision, NVIDIA Gemma 3n, Pollinations Vision.
-- Audio: OpenAI Audio, NVIDIA Gemma 3n.
+- Text: OpenAI, NVIDIA Nemotron Omni, Pollinations emergency fallback.
+- Vision: OpenAI Vision, NVIDIA Nemotron Omni, Pollinations Vision.
+- Audio: OpenAI Audio, NVIDIA Nemotron Omni.
 - Embeddings: OpenAI, Pollinations.

@@ -13,9 +13,9 @@ Failure triggers:
 
 Routing:
 
-- Text: OpenAI, NVIDIA Gemma 3n, Pollinations.
-- Vision: OpenAI Vision, NVIDIA Gemma 3n, Pollinations.
-- Audio: OpenAI Audio, NVIDIA Gemma 3n.
+- Text: OpenAI, NVIDIA Nemotron Omni, Pollinations.
+- Vision: OpenAI Vision, NVIDIA Nemotron Omni, Pollinations.
+- Audio: OpenAI Audio, NVIDIA Nemotron Omni.
 - Embeddings: OpenAI, Pollinations.
 
 Provider responses are normalized into `ProviderResponse` descendants before leaving provider classes. Raw provider payloads never reach agents.

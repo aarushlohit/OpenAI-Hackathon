@@ -12,6 +12,5 @@ class PostgresReplayRepository:
         return await self._replay_engine.build(investigation_id, speed=speed)
 
     async def event_count(self, investigation_id: str) -> int:
-        events = await self._event_store.list_for_investigation(investigation_id)
-        return len(events)
+        return len(await self._event_store.list_for_investigation(investigation_id))
 

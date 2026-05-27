@@ -65,7 +65,9 @@ class AppContainer:
         self.event_bus = InMemoryEventBus(max_size=self.settings.event_stream_buffer_size)
         self.websocket_manager = WebsocketConnectionManager(self.event_bus)
         self.dead_letter_queue = DeadLetterQueue()
-        self.redis_runtime = RedisRuntime(create_redis_client(self.settings.redis_dsn))
+        self.redis_runtime = RedisRuntime(
+            create_redis_client(self.settings.redis_dsn, self.settings.runtime_enable_redis_client)
+        )
         self.redis_broadcaster = RedisEventBroadcaster(self.redis_runtime)
         self.runtime_metrics = RuntimeMetrics()
         self.runtime_health = RuntimeHealthManager()

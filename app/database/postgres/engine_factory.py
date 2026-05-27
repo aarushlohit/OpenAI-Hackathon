@@ -7,3 +7,4 @@ def create_postgres_engine(dsn: str, pool_size: int = 5) -> Any:
     except ImportError as exc:
         raise RuntimeError("Install sqlalchemy and asyncpg to enable PostgreSQL adapters") from exc
     return create_async_engine(dsn, pool_size=pool_size, pool_pre_ping=True)
+

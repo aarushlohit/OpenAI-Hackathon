@@ -20,9 +20,8 @@ class PostgresSqlRunner:
             raise SqlExecutionError("PostgreSQL engine is not configured")
         if hasattr(self._engine, "execute"):
             return await self._engine.execute(statement, parameters or {})
-        statement_obj = self._statement(statement)
         async with self._engine.begin() as connection:
-            return await connection.execute(statement_obj, parameters or {})
+            return await connection.execute(self._statement(statement), parameters or {})
 
     def _statement(self, statement: str) -> Any:
         try:
@@ -30,3 +29,4 @@ class PostgresSqlRunner:
         except ImportError as exc:
             raise SqlExecutionError("SQLAlchemy is required for engine-backed execution") from exc
         return text(statement)
+
