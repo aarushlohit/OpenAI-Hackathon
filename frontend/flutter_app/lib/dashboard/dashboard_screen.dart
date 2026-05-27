@@ -6,6 +6,8 @@ import '../features/evidence/evidence_upload_panel.dart';
 import '../features/evidence/explainability_panel.dart';
 import '../features/graph/threat_graph_panel.dart';
 import '../features/investigation/investigation_controller.dart';
+import '../features/investigation/investigation_state.dart';
+import '../models/investigation_event.dart';
 import '../features/investigation/live_investigation_console.dart';
 import '../features/replay/replay_console.dart';
 import '../features/runtime/runtime_health_panel.dart';
@@ -94,9 +96,9 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  int _campaignSignals(state) {
+  int _campaignSignals(InvestigationState state) {
     return state.events
-        .where((event) => event.event.contains('campaign'))
+        .where((InvestigationEvent event) => event.event.contains('campaign'))
         .length;
   }
 }

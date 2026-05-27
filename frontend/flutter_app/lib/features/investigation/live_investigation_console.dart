@@ -59,11 +59,15 @@ class _LiveInvestigationConsoleState extends ConsumerState<LiveInvestigationCons
               children: [
                 DropdownButton<InvestigationPreset>(
                   value: investigationPresets.firstWhere(
-                    (preset) => preset.input == _controller.text,
+                    (InvestigationPreset preset) => preset.input == _controller.text,
                     orElse: () => investigationPresets.first,
                   ),
                   items: investigationPresets
-                      .map((preset) => DropdownMenuItem(value: preset, child: Text(preset.name)))
+                      .map((InvestigationPreset preset) =>
+                          DropdownMenuItem<InvestigationPreset>(
+                            value: preset,
+                            child: Text(preset.name),
+                          ))
                       .toList(),
                   onChanged: (preset) {
                     if (preset != null) {

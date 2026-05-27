@@ -5,7 +5,7 @@ class InvestigationPreset {
   final String input;
 }
 
-const investigationPresets = [
+const List<InvestigationPreset> investigationPresets = <InvestigationPreset>[
   InvestigationPreset(
     name: 'Telegram onboarding scam',
     input: 'Telegram HR from @careerfastjob claims direct internship selection. '

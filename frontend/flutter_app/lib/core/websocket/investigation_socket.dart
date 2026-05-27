@@ -6,12 +6,13 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../models/investigation_event.dart';
 
-/// Hardened WebSocket client with:
-/// - Exponential-backoff reconnect (capped at 8s)
-/// - Event deduplication by event_id
-/// - Bounded render buffer (maxBufferedEvents)
-/// - Stale event protection (events older than staleCutoffSeconds are dropped)
-/// - Replay-safe ordering (events emitted in arrival order, deduped by ID)
+/// Hardened, fully typed WebSocket client.
+///
+/// Type safety guarantees:
+/// - [seenIds] is [HashSet<String>] — no dynamic deduplication
+/// - [controller] is [StreamController<InvestigationEvent>] — no dynamic stream
+/// - All JSON payloads are cast via [InvestigationEvent.fromJson] before emission
+/// - Reconnect uses typed callback signature
 class InvestigationSocket {
   InvestigationSocket(
     this.baseUri, {
@@ -24,37 +25,40 @@ class InvestigationSocket {
   final int staleCutoffSeconds;
 
   Stream<InvestigationEvent> connect(String correlationId) {
-    // ignore: close_sinks — controller is closed when cancelled
-    final controller = StreamController<InvestigationEvent>.broadcast();
-    final seenIds = HashSet<String>();
+    final StreamController<InvestigationEvent> controller =
+        StreamController<InvestigationEvent>.broadcast();
+    final Set<String> seenIds = HashSet<String>();
     var closed = false;
     var rendered = 0;
 
     Future<void> open([int attempt = 0]) async {
       if (closed) return;
-      final uri = baseUri.replace(path: '/v1/ws/investigations/$correlationId');
+      final Uri uri =
+          baseUri.replace(path: '/v1/ws/investigations/$correlationId');
       WebSocketChannel? channel;
       try {
         channel = WebSocketChannel.connect(uri);
-        // Reset attempt counter on successful open
-        attempt = 0;
       } catch (_) {
         _scheduleReconnect(open, attempt);
         return;
       }
 
       channel.stream.listen(
-        (payload) {
-          if (closed || payload is! String || rendered >= maxBufferedEvents) return;
-
-          Map<String, Object?> json;
-          try {
-            json = jsonDecode(payload) as Map<String, Object?>;
-          } catch (_) {
-            return; // malformed payload — skip silently
+        (Object? payload) {
+          if (closed || payload is! String || rendered >= maxBufferedEvents) {
+            return;
           }
 
-          final event = InvestigationEvent.fromJson(json);
+          final Map<String, Object?> json;
+          try {
+            final Object? decoded = jsonDecode(payload);
+            if (decoded is! Map<String, Object?>) return;
+            json = decoded;
+          } catch (_) {
+            return; // malformed — skip silently
+          }
+
+          final InvestigationEvent event = InvestigationEvent.fromJson(json);
 
           // Deduplication guard
           if (event.eventId.isEmpty || seenIds.contains(event.eventId)) return;
@@ -88,16 +92,15 @@ class InvestigationSocket {
     Future<void> Function([int attempt]) open,
     int attempt,
   ) {
-    // Exponential backoff: 250ms * 2^attempt, capped at 8000ms
-    final ms = (250 * (1 << attempt.clamp(0, 5))).clamp(250, 8000);
+    final int ms = (250 * (1 << attempt.clamp(0, 5))).clamp(250, 8000);
     Future<void>.delayed(Duration(milliseconds: ms), () => open(attempt + 1));
   }
 
   bool _isStale(String timestamp) {
     if (timestamp.isEmpty) return false;
     try {
-      final ts = DateTime.parse(timestamp);
-      final age = DateTime.now().difference(ts).inSeconds.abs();
+      final DateTime ts = DateTime.parse(timestamp);
+      final int age = DateTime.now().difference(ts).inSeconds.abs();
       return age > staleCutoffSeconds;
     } catch (_) {
       return false;

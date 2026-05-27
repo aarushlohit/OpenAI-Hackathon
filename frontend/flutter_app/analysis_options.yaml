@@ -1,1 +1,14 @@
 include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    invalid_use_of_protected_member: warning
+    missing_required_param: error
+
+linter:
+  rules:
+    prefer_typing_uninitialized_variables: true
+    avoid_dynamic_calls: true

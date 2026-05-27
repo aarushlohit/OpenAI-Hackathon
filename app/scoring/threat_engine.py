@@ -21,9 +21,10 @@ _SIGNAL_WEIGHTS: dict[str, tuple[float, int]] = {
     # (contribution_weight_0_to_1, base_score_points)
     "urgency_manipulation": (0.90, 14),
     "refundable_fee_request": (0.95, 18),
+    "payment_coercion": (0.92, 22),
     "suspicious_domain_age": (0.80, 12),
     "hidden_whois": (0.70, 10),
-    "telegram_only_onboarding": (0.85, 15),
+    "telegram_only_onboarding": (0.85, 18),
     "reused_upi_payment_id": (0.88, 14),
     "graph_campaign_correlation": (0.92, 16),
     "recruiter_impersonation": (0.90, 15),
@@ -40,8 +41,12 @@ _PATTERN_SIGNAL_MAP: dict[str, str] = {
     "urgency_manipulation": "urgency_manipulation",
     "refundable_fee": "refundable_fee_request",
     "fee_request": "refundable_fee_request",
+    "payment_coercion": "payment_coercion",
+    "coercion": "payment_coercion",
+    "forced_payment": "payment_coercion",
     "telegram_only": "telegram_only_onboarding",
     "telegram": "telegram_only_onboarding",
+    "telegram_only_onboarding": "telegram_only_onboarding",
     "upi_reuse": "reused_upi_payment_id",
     "campaign_correlation": "graph_campaign_correlation",
     "impersonation": "recruiter_impersonation",
@@ -111,17 +116,24 @@ class ThreatScoringEngine:
 
     def _from_behavior(self, result: BehaviorResult) -> list[EvidenceSignal]:
         out: list[EvidenceSignal] = []
-        base_confidence = min(1.0, result.risk_score / 100.0)
+        # Prefer the result's explicit confidence when available; fall back to risk_score.
+        explicit_conf = getattr(result, "confidence", None)
+        effective_confidence = (
+            float(explicit_conf) if isinstance(explicit_conf, (int, float)) and explicit_conf > 0
+            else min(1.0, result.risk_score / 100.0)
+        )
         for pattern in result.detected_patterns:
             key = _PATTERN_SIGNAL_MAP.get(pattern, pattern)
-            weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.50, 6))
-            contribution = int(base_pts * weight * base_confidence)
+            weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.75, 10))
+            # Contribution = base_pts × weight (not further discounted by confidence —
+            # confidence is stored as metadata, not a penalty on detected patterns).
+            contribution = int(base_pts * weight)
             out.append(
                 EvidenceSignal(
                     signal=key,
                     weight=weight,
                     score_contribution=contribution,
-                    confidence=round(base_confidence, 3),
+                    confidence=round(effective_confidence, 3),
                     source="behavior_agent",
                     detail=f"Pattern '{pattern}' detected; risk_score={result.risk_score}",
                 )

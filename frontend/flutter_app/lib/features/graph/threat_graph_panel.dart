@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../graph/graph_canvas.dart';
+import '../../models/investigation_event.dart';
 import '../../models/threat_graph.dart';
 import '../investigation/investigation_controller.dart';
 
@@ -10,28 +11,32 @@ class ThreatGraphPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final events = ref.watch(investigationControllerProvider).events;
-    final nodes = events
-        .where((event) => event.event == 'graph_node_added')
+    final List<InvestigationEvent> events =
+        ref.watch(investigationControllerProvider).events;
+
+    final List<ThreatGraphNode> nodes = events
+        .where((InvestigationEvent e) => e.event == 'graph_node_added')
         .map(
-          (event) => ThreatGraphNode(
-            id: event.payload['id']?.toString() ?? event.eventId,
-            label: event.payload['label']?.toString() ?? 'entity',
-            kind: event.payload['kind']?.toString() ?? 'unknown',
-            severity: event.payload['severity']?.toString() ?? 'unknown',
+          (InvestigationEvent e) => ThreatGraphNode(
+            id: e.payload['id']?.toString() ?? e.eventId,
+            label: e.payload['label']?.toString() ?? 'entity',
+            kind: e.payload['kind']?.toString() ?? 'unknown',
+            severity: e.payload['severity']?.toString() ?? 'unknown',
           ),
         )
         .toList();
-    final edges = events
-        .where((event) => event.event == 'graph_edge_added')
+
+    final List<ThreatGraphEdge> edges = events
+        .where((InvestigationEvent e) => e.event == 'graph_edge_added')
         .map(
-          (event) => ThreatGraphEdge(
-            source: event.payload['source']?.toString() ?? '',
-            target: event.payload['target']?.toString() ?? '',
-            relation: event.payload['kind']?.toString() ?? 'linked_to',
+          (InvestigationEvent e) => ThreatGraphEdge(
+            source: e.payload['source']?.toString() ?? '',
+            target: e.payload['target']?.toString() ?? '',
+            relation: e.payload['kind']?.toString() ?? 'linked_to',
           ),
         )
         .toList();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),

@@ -74,8 +74,9 @@ class InvestigationController extends StateNotifier<InvestigationState> {
     final payload = event.payload;
 
     // Bounded event list (newest 500)
-    final events = [...state.events, event];
-    final bounded = events.length > 500 ? events.sublist(events.length - 500) : events;
+    final List<InvestigationEvent> events = <InvestigationEvent>[...state.events, event];
+    final List<InvestigationEvent> bounded =
+        events.length > 500 ? events.sublist(events.length - 500) : events;
 
     // Score / severity
     final score = payload['score'] is int ? payload['score'] as int : state.threatScore;
@@ -121,7 +122,7 @@ class InvestigationController extends StateNotifier<InvestigationState> {
       replayVerified: replayVerified,
       feed: feedEntry == null
           ? state.feed
-          : [feedEntry, ...state.feed].take(24).toList(),
+          : (<String>[feedEntry, ...state.feed]).take(24).toList(),
     );
   }
 
@@ -150,8 +151,8 @@ class InvestigationController extends StateNotifier<InvestigationState> {
     final raw = payload['evidence_breakdown'];
     if (raw is! List) return null;
     return raw
-        .whereType<Map>()
-        .map((m) => Map<String, Object?>.from(m))
+        .whereType<Map<dynamic, dynamic>>()
+        .map((Map<dynamic, dynamic> m) => Map<String, Object?>.from(m))
         .toList();
   }
 

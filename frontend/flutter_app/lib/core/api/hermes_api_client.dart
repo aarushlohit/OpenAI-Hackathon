@@ -19,7 +19,11 @@ class HermesApiClient {
 
   Future<List<Map<String, Object?>>> investigationEvents(String investigationId) async {
     final response = await _dio.get<List<dynamic>>('/v1/investigations/$investigationId/events');
-    return response.data?.whereType<Map>().map((item) => Map<String, Object?>.from(item)).toList() ?? const [];
+    return response.data
+            ?.whereType<Map<dynamic, dynamic>>()
+            .map((Map<dynamic, dynamic> item) => Map<String, Object?>.from(item))
+            .toList() ??
+        const [];
   }
 
   Future<Map<String, Object?>> replay(String investigationId) async {
@@ -55,8 +59,9 @@ class HermesApiClient {
   Future<List<String>> threatFeed() async {
     final response = await _dio.get<List<dynamic>>('/v1/threat-feed');
     return response.data
-            ?.map((item) => item is Map ? item['message'] ?? item['title'] ?? item.toString() : item.toString())
-            .map((item) => item.toString())
+            ?.map((dynamic item) =>
+                item is Map ? item['message'] ?? item['title'] ?? item.toString() : item.toString())
+            .map((dynamic item) => item.toString())
             .toList() ??
         const [];
   }
