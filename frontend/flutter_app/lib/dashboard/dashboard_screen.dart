@@ -7,11 +7,13 @@ import '../features/evidence/explainability_panel.dart';
 import '../features/graph/threat_graph_panel.dart';
 import '../features/investigation/investigation_controller.dart';
 import '../features/investigation/investigation_state.dart';
-import '../models/investigation_event.dart';
 import '../features/investigation/live_investigation_console.dart';
+import '../features/investigation/story_timeline_panel.dart';
 import '../features/replay/replay_console.dart';
+import '../features/runtime/observability_panel.dart';
 import '../features/runtime/runtime_health_panel.dart';
 import '../features/threat_feed/live_threat_feed_panel.dart';
+import '../models/investigation_event.dart';
 import '../widgets/severity_meter.dart';
 import 'campaign_panel.dart';
 import 'provider_status_panel.dart';
@@ -21,16 +23,16 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(investigationControllerProvider);
+    final InvestigationState state = ref.watch(investigationControllerProvider);
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
+          children: <Widget>[
             const Text('HERMES-X Terminal'),
             const SizedBox(width: 16),
             if (state.failoverActive)
               _FailoverBadge(provider: state.activeProvider)
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .animate(onPlay: (AnimationController c) => c.repeat(reverse: true))
                   .fadeIn(duration: 600.ms),
             if (state.replayVerified)
               _ReplayVerifiedBadge()
@@ -38,7 +40,7 @@ class DashboardScreen extends ConsumerWidget {
                   .fadeIn(duration: 400.ms),
           ],
         ),
-        actions: [
+        actions: <Widget>[
           if (state.investigationId.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -55,37 +57,54 @@ class DashboardScreen extends ConsumerWidget {
       body: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
-          children: [
+          children: <Widget>[
             // ── Left column ──────────────────────────────────────────────
             Expanded(
               flex: 2,
               child: Column(
-                children: [
-                  SeverityMeter(score: state.threatScore, label: state.severity.toUpperCase()),
-                  const SizedBox(height: 10),
+                children: <Widget>[
+                  SeverityMeter(
+                      score: state.threatScore,
+                      label: state.severity.toUpperCase()),
+                  const SizedBox(height: 8),
+                  const ObservabilityPanel(),
+                  const SizedBox(height: 8),
                   CampaignPanel(activeCampaigns: _campaignSignals(state)),
-                  const SizedBox(height: 10),
-                  ProviderStatusPanel(status: state.status.name),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
+                  ProviderStatusPanel(
+                    status: state.status.name,
+                    provider: state.activeProvider,
+                    failoverActive: state.failoverActive,
+                  ),
+                  const SizedBox(height: 8),
                   const RuntimeHealthPanel(),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   const Expanded(child: LiveInvestigationConsole()),
                 ],
               ),
             ),
             const SizedBox(width: 14),
-            // ── Right column ─────────────────────────────────────────────
+            // ── Centre column ─────────────────────────────────────────────
             const Expanded(
               child: Column(
-                children: [
+                children: <Widget>[
                   Expanded(flex: 3, child: ThreatGraphPanel()),
-                  SizedBox(height: 10),
+                  SizedBox(height: 8),
                   ReplayConsole(),
-                  SizedBox(height: 10),
+                  SizedBox(height: 8),
                   EvidenceUploadPanel(),
-                  SizedBox(height: 10),
-                  Expanded(flex: 2, child: ExplainabilityPanel()),
-                  SizedBox(height: 10),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            // ── Right column ──────────────────────────────────────────────
+            const Expanded(
+              child: Column(
+                children: <Widget>[
+                  Expanded(flex: 2, child: StoryTimelinePanel()),
+                  SizedBox(height: 8),
+                  Expanded(flex: 3, child: ExplainabilityPanel()),
+                  SizedBox(height: 8),
                   Expanded(child: LiveThreatFeedPanel()),
                 ],
               ),
@@ -113,6 +132,9 @@ class _FailoverBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String label = provider.isNotEmpty
+        ? provider.toUpperCase().replaceAll('NVIDIA_NIM', 'NEMOTRON')
+        : 'NEMOTRON';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -124,11 +146,12 @@ class _FailoverBadge extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.swap_horiz, size: 12, color: Theme.of(context).colorScheme.secondary),
+        children: <Widget>[
+          Icon(Icons.swap_horiz, size: 12,
+              color: Theme.of(context).colorScheme.secondary),
           const SizedBox(width: 4),
           Text(
-            'FAILOVER → ${provider.isNotEmpty ? provider.toUpperCase() : "NEMOTRON"}',
+            'FAILOVER → $label',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.bold,
@@ -157,8 +180,9 @@ class _ReplayVerifiedBadge extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.verified, size: 12, color: Theme.of(context).colorScheme.tertiary),
+        children: <Widget>[
+          Icon(Icons.verified, size: 12,
+              color: Theme.of(context).colorScheme.tertiary),
           const SizedBox(width: 4),
           Text(
             'REPLAY VERIFIED',
