@@ -1,0 +1,2 @@
+"""Campaign operation tests."""
+

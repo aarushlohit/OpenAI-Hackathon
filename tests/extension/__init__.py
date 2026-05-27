@@ -1,0 +1,2 @@
+"""Extension contract tests."""
+

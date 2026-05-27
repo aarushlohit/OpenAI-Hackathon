@@ -1,0 +1,2 @@
+"""Protection API tests."""
+

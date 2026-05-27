@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Hermes Sentinel",
+  "version": "0.1.0",
+  "description": "Realtime Hermes-X protection for recruitment scam browsing.",
+  "permissions": ["tabs", "activeTab", "scripting"],
+  "host_permissions": ["http://localhost:8000/*", "https://*/"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Hermes Sentinel",
+    "default_popup": "src/popup.html"
+  }
+}
+

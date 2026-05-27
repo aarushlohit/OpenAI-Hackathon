@@ -1,0 +1,22 @@
+agents:
+  intake:
+    emits: [agent_progress]
+    workflows: [url_intelligence, screenshot_intelligence, document_intelligence, message_intelligence]
+    confidence_limit: 1.0
+    actions: [validate_input]
+  behavior:
+    emits: [agent_progress]
+    workflows: [url_intelligence, screenshot_intelligence, document_intelligence, message_intelligence]
+    confidence_limit: 0.95
+    actions: [analyze_behavior]
+  osint:
+    emits: [agent_progress]
+    workflows: [url_intelligence, message_intelligence]
+    confidence_limit: 0.95
+    actions: [analyze_domain, correlate_reputation]
+  vision:
+    emits: [agent_progress]
+    workflows: [screenshot_intelligence, document_intelligence, message_intelligence]
+    confidence_limit: 0.9
+    actions: [extract_ocr, analyze_visual_artifacts]
+
