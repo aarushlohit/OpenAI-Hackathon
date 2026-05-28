@@ -26,8 +26,11 @@ OPENCODE_API_URL = os.getenv(
     "OPENCODE_API_URL",
     "https://opencode.ai/zen/v1/chat/completions",
 )
-OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "90"))
+OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "120"))
 SEARCH_TIMEOUT_SECONDS = int(os.getenv("REPUTATION_SEARCH_TIMEOUT_SECONDS", "12"))
+# DeepSeek-v4 is a reasoning model — it burns tokens on chain-of-thought before
+# producing content. Set the budget high enough that the final JSON always fits.
+_DEFAULT_MAX_TOKENS = int(os.getenv("OPENCODE_MAX_TOKENS", "8192"))
 
 
 def search_company_reputation(evidence: dict[str, Any]) -> dict[str, Any]:
@@ -44,53 +47,67 @@ def search_company_reputation(evidence: dict[str, Any]) -> dict[str, Any]:
     # Build a concise snippet summary to inject into the prompt
     snippet_summary = _summarize_search_snippets(search_results)
 
-    prompt = f"""You are a senior OSINT investigator specialising in internship and recruitment scams.
+    prompt = f"""You are a senior OSINT investigator specialising in recruitment trust intelligence.
 
---- CRITICAL RULES ---
-1. "Company is registered" or "company has a website" is NOT sufficient evidence of legitimacy.
-   Scammers routinely use real registered companies as fronts for fake internships.
-2. A company that appears on Glassdoor or AmbitionBox with mostly positive reviews can STILL be
-   running a separate scam internship campaign. Look for recent complaints specifically about
-   internships, offer letters, UPI payments, or Telegram onboarding.
-3. If the public search snippets show ANY credible complaint about the company asking for deposits,
-   UPI, or certificate-based scam internships, escalate to SCAM or at minimum UNCERTAIN.
-4. Absence of results ("not_found") on Reddit or scam-report sites is weak evidence of legitimacy;
-   do NOT treat it as a strong safe signal.
+--- TRUST INTELLIGENCE FRAMEWORK ---
+You are NOT a binary scam detector. You evaluate trust across multiple dimensions:
+
+1. LEGITIMACY: Is the company real, registered, with valid domain and official contact?
+2. REPUTATION: What does the public say — Glassdoor, AmbitionBox, Reddit, Quora?
+3. EDUCATIONAL VALUE: Does this internship offer real learning, or is it certificate farming?
+4. FINANCIAL SAFETY: Any payment requests, UPI, fees, deposits?
+5. EXPLOITATION: Mass onboarding, no mentorship, task-based certificates, resume padding?
+
+--- TRUST TIERS ---
+- LEGITIMATE: Trusted company, professional hiring, strong reputation, safe
+- LOW_TRUST: Legal but weak educational value, mass onboarding, certificate-focused
+- SUSPICIOUS: Mixed signals, unclear legitimacy, inconsistent reputation
+- HIGH_RISK: Strong scam indicators, payment coercion, phishing domain
+- CRITICAL: Active fraud, payment extraction, impersonation
+
+--- CALIBRATION RULES ---
+1. Do NOT classify as HIGH_RISK/CRITICAL simply because a company is mass-hiring interns.
+   Use LOW_TRUST or SUSPICIOUS instead.
+2. Only escalate to HIGH_RISK if payment coercion, phishing, or clear fraud exists.
+3. "Company is registered" is NOT sufficient for LEGITIMATE — check educational value and reputation.
+4. Certificate-farming, mass virtual internship providers = LOW_TRUST (not SCAM).
+5. Absence of results on Reddit/scam sites does NOT mean LEGITIMATE — could be SUSPICIOUS.
 
 --- REAL-WORLD WEB SEARCH SNIPPETS ---
 {snippet_summary}
 
 --- INSTRUCTIONS ---
-Synthesize all evidence (web snippets + document/domain/behavioral evidence below).
-Pay special attention to:
- - Reddit posts, Quora answers, or review-site entries mentioning scam, fraud, deposit, UPI,
-   certificate, offer letter, or Telegram for THIS company.
- - Whether the onboarding described matches how legitimate companies in this sector actually hire.
+Synthesize all evidence. Pay attention to:
+ - Reddit/Quora/Glassdoor entries mentioning this company's internship quality, scam, UPI, certificates.
+ - Whether onboarding matches how professional companies in this sector actually hire.
+ - Mass hiring signals, certificate-only benefits, no real mentorship evidence.
  - Domain mismatches, informal email addresses, missing official contact details.
 
 Return ONLY valid JSON:
 {{
   "search_performed": true,
-  "conclusion": "SCAM | NOT SCAM | UNCERTAIN",
+  "conclusion": "LEGITIMATE | LOW_TRUST | SUSPICIOUS | HIGH_RISK | CRITICAL",
   "confidence": <integer 0-100>,
   "company": "company name or Unknown",
   "registered_but_suspicious": <true|false>,
+  "certificate_farming_signals": <true|false>,
   "sources_checked": [
-    {{"source": "Glassdoor", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
-    {{"source": "AmbitionBox", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
-    {{"source": "Reddit", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
-    {{"source": "Quora", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
-    {{"source": "Scam reports/web", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}}
+    {{"source": "Glassdoor", "status": "found | not_found | blocked | conflicting", "finding": "<what was found>", "url_or_query": "<query>"}},
+    {{"source": "AmbitionBox", "status": "found | not_found | blocked | conflicting", "finding": "<what was found>", "url_or_query": "<query>"}},
+    {{"source": "Reddit", "status": "found | not_found | blocked | conflicting", "finding": "<what was found>", "url_or_query": "<query>"}},
+    {{"source": "Quora", "status": "found | not_found | blocked | conflicting", "finding": "<what was found>", "url_or_query": "<query>"}},
+    {{"source": "Scam reports/web", "status": "found | not_found | blocked | conflicting", "finding": "<what was found>", "url_or_query": "<query>"}}
   ],
-  "reputation_signals": ["specific public reputation signal found in web snippets"],
-  "scam_signals": ["specific scam signal found in web snippets or evidence — be explicit"],
-  "safe_signals": ["specific legitimacy signal"],
-  "summary": "3-5 sentence web-search conclusion — cite specific snippets or absence of results",
-  "recommended_action": "clear 1-2 sentence advice for the user"
+  "reputation_signals": ["specific public reputation signal"],
+  "scam_signals": ["specific fraud/scam signal found"],
+  "exploitation_signals": ["certificate farming, mass hiring, no mentorship signals"],
+  "safe_signals": ["specific legitimacy or educational value signal"],
+  "summary": "3-5 sentence trust conclusion — cite specific snippets",
+  "recommended_action": "clear 1-2 sentence honest advice for the student/job seeker"
 }}
 
-Full evidence bundle:
-{json.dumps(enriched_evidence, ensure_ascii=False, indent=2)}
+Full evidence bundle (trimmed for brevity):
+{_trim_evidence_json(enriched_evidence)}
 """
     result = _run_opencode_prompt(prompt)
     if result.get("error") or (not result.get("conclusion") and not result.get("sources_checked")):
@@ -108,26 +125,37 @@ Full evidence bundle:
 
 
 def assess_offer_letter(evidence: dict[str, Any]) -> dict[str, Any]:
-    """Run OpenCode's OpenAI-compatible HTTP API and parse the final result."""
-    prompt = f"""You are a recruitment scam investigator.
+    """Run OpenCode's final trust intelligence review."""
+    prompt = f"""You are a Recruitment Trust Intelligence Analyst.
 
-Review this extracted offer-letter/company evidence and web-search reputation evidence.
-Do not mark an internship safe just because a company appears registered.
-Payment/deposit requests, Telegram-only onboarding, domain impersonation, bad public reviews,
-or Reddit/AmbitionBox/Glassdoor complaints must outweigh basic registration.
+Review all evidence and produce a final trust assessment.
+
+TRUST TIERS:
+- LEGITIMATE: Trusted company, professional process, strong reputation, safe onboarding
+- LOW_TRUST: Legal but weak educational value, certificate farming, mass onboarding, poor mentorship
+- SUSPICIOUS: Mixed signals, unclear legitimacy, inconsistent reputation
+- HIGH_RISK: Strong fraud indicators — payment coercion, phishing, impersonation
+- CRITICAL: Active fraud — payment extraction, phishing infrastructure, financial attack
+
+CALIBRATION:
+- Do NOT classify as HIGH_RISK/CRITICAL unless money extraction or phishing exists.
+- Mass internship providers with certificate-only value = LOW_TRUST (not SCAM/HIGH_RISK)
+- Registered company + no payment + professional structure = at minimum SUSPICIOUS or LEGITIMATE
+- Poor reputation on Glassdoor/Reddit about internship quality = LOW_TRUST
 
 Return ONLY valid JSON:
 {{
-  "conclusion": "SCAM | NOT SCAM | UNCERTAIN",
-  "confidence": 0,
+  "conclusion": "LEGITIMATE | LOW_TRUST | SUSPICIOUS | HIGH_RISK | CRITICAL",
+  "confidence": <integer 0-100>,
   "company": "company name or Unknown",
-  "summary": "one paragraph conclusion",
+  "summary": "one paragraph nuanced trust assessment",
   "key_evidence": ["evidence point"],
-  "recommended_action": "what the user should do next"
+  "exploitation_signals": ["certificate farming, mass hiring, etc. if found"],
+  "recommended_action": "honest 1-2 sentence advice for the student/job seeker"
 }}
 
 Evidence:
-{json.dumps(evidence, ensure_ascii=False, indent=2)}
+{_trim_evidence_json(evidence)}
 """
 
     result = _run_opencode_prompt(prompt)
@@ -149,7 +177,7 @@ def _run_opencode_prompt(prompt: str) -> dict[str, Any]:
         "model": OPENCODE_API_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
-        "max_tokens": int(os.getenv("OPENCODE_MAX_TOKENS", "4096")),
+        "max_tokens": _DEFAULT_MAX_TOKENS,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -167,8 +195,11 @@ def _run_opencode_prompt(prompt: str) -> dict[str, Any]:
         data = response.json()
         message = data["choices"][0]["message"]
         output = message.get("content") or ""
-        if not output:
-            output = message.get("reasoning_content") or ""
+        reasoning = message.get("reasoning_content") or ""
+        if not output and reasoning:
+            # Reasoning model put everything in chain-of-thought — try to salvage
+            # a JSON block from the reasoning text itself.
+            output = _extract_json_from_reasoning(reasoning)
     except requests.HTTPError as exc:
         body = exc.response.text[:500] if exc.response is not None else ""
         return {
@@ -201,6 +232,62 @@ def _run_opencode_prompt(prompt: str) -> dict[str, Any]:
 
 def _flatten_evidence(evidence: dict[str, Any]) -> str:
     return json.dumps(evidence, ensure_ascii=False).lower()
+
+
+def _trim_evidence_json(evidence: dict[str, Any], max_chars: int = 3000) -> str:
+    """Serialize evidence but cap the total size to keep prompts manageable."""
+    raw = json.dumps(evidence, ensure_ascii=False, indent=2)
+    if len(raw) <= max_chars:
+        return raw
+    # Progressively drop the noisiest key (public_search_results snippets)
+    slim = {k: v for k, v in evidence.items() if k != "public_search_results"}
+    raw = json.dumps(slim, ensure_ascii=False, indent=2)
+    if len(raw) <= max_chars:
+        return raw + "\n  [public_search_results omitted for brevity]"
+    # Still too big — truncate
+    return raw[:max_chars] + "\n... [truncated]"
+
+
+def _extract_json_from_reasoning(text: str) -> str:
+    """Pull the outermost JSON object out of a reasoning/chain-of-thought string.
+
+    The non-greedy regex approach fails on nested JSON. Instead we scan for the
+    first '{' and then walk the string counting braces to find the matching '}'.
+    We return the longest valid JSON block found.
+    """
+    best = ""
+    i = 0
+    while i < len(text):
+        if text[i] != "{":
+            i += 1
+            continue
+        depth = 0
+        in_str = False
+        escape = False
+        for j in range(i, len(text)):
+            ch = text[j]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and in_str:
+                escape = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[i : j + 1]
+                    if len(candidate) > len(best):
+                        best = candidate
+                    break
+        i += 1
+    return best
 
 
 def _extract_company_from_evidence(evidence: dict[str, Any]) -> str:

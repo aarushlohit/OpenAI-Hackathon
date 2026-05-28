@@ -547,8 +547,9 @@ function renderHermesProgress() {
         ${renderStep('osint', 'Verifying company legitimacy…', 'wait')}
         ${renderStep('domain', 'Checking domain trust…', 'wait')}
         ${renderStep('web', 'Searching public reputation…', 'wait')}
-        ${renderStep('consensus', 'Running consensus analysis…', 'wait')}
-        ${renderStep('opencode', 'Parsing through OpenCode…', 'wait')}
+        ${renderStep('reputation', 'Evaluating educational value & trust quality…', 'wait')}
+        ${renderStep('consensus', 'Synthesizing trust intelligence…', 'wait')}
+        ${renderStep('opencode', 'Final trust review via OpenCode…', 'wait')}
       </div>
     </div>
   `;
@@ -579,8 +580,9 @@ const STEP_LABELS = {
   domain: 'Checking domain trust and typo-squatting indicators…',
   image: 'Analyzing attached image for fraud indicators…',
   web: 'Searching Glassdoor, AmbitionBox, Reddit, and scam reports…',
-  consensus: 'Running consensus analysis and forming final verdict…',
-  opencode: 'Parsing evidence through OpenCode DeepSeek review…',
+  reputation: 'Evaluating educational value, trust quality, and exploitation signals…',
+  consensus: 'Synthesizing trust intelligence and forming final verdict…',
+  opencode: 'Final trust review via OpenCode DeepSeek…',
 };
 
 function updateProgressStep(stepId, message) {
@@ -620,7 +622,6 @@ function renderVerdict(consensus, technical, investigationId) {
   currentReport = buildReportRecord(consensus, technical, investigationId);
   addHistoryRecord(currentReport);
 
-  // Build why_flagged list
   const flagged = (consensus.why_flagged || []).map(s =>
     `<div class="verdict-list-item">${escapeHtml(s)}</div>`
   ).join('');
@@ -628,6 +629,23 @@ function renderVerdict(consensus, technical, investigationId) {
   const safeSignals = (consensus.safe_signals || []).map(s =>
     `<div class="verdict-list-item">${escapeHtml(s)}</div>`
   ).join('');
+
+  const exploitationSignals = (consensus.exploitation_signals || []).map(s =>
+    `<div class="verdict-list-item exploitation-item">${escapeHtml(s)}</div>`
+  ).join('');
+
+  // Trust dimensions radar-style bar display
+  const td = consensus.trust_dimensions || {};
+  const trustDimensions = Object.entries(td).length ? Object.entries(td).map(([key, val]) => {
+    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const pct = Math.max(0, Math.min(100, Number(val) || 0));
+    const dimTier = pct >= 70 ? 'safe' : pct >= 45 ? 'medium' : 'high';
+    return `<div class="trust-dim-row">
+      <span class="trust-dim-label">${escapeHtml(label)}</span>
+      <div class="trust-dim-bar"><div class="trust-dim-fill fill-${dimTier}" style="width:${pct}%"></div></div>
+      <span class="trust-dim-pct">${pct}</span>
+    </div>`;
+  }).join('') : '';
 
   const verdictHtml = `
     <div class="verdict-card verdict-${tier}">
@@ -645,10 +663,22 @@ function renderVerdict(consensus, technical, investigationId) {
           <div class="verdict-list">${flagged}</div>
         </div>` : ''}
 
+        ${exploitationSignals ? `
+        <div class="verdict-section">
+          <div class="verdict-section-title">Exploitation & quality signals</div>
+          <div class="verdict-list exploitation-list">${exploitationSignals}</div>
+        </div>` : ''}
+
         ${safeSignals ? `
         <div class="verdict-section">
           <div class="verdict-section-title">Reassuring signals</div>
           <div class="verdict-list">${safeSignals}</div>
+        </div>` : ''}
+
+        ${trustDimensions ? `
+        <div class="verdict-section">
+          <div class="verdict-section-title">Trust dimensions</div>
+          <div class="trust-dimensions">${trustDimensions}</div>
         </div>` : ''}
 
         ${consensus.recommendation ? `
@@ -1173,9 +1203,16 @@ function setActiveNav(label) {
 // ── Verdict helpers ────────────────────────────────────────
 function verdictTier(verdict) {
   if (!verdict) return 'medium';
-  const v = verdict.toUpperCase();
+  const v = verdict.toUpperCase().trim();
+  // New 5-tier trust system
+  if (v === 'LEGITIMATE') return 'safe';
+  if (v === 'LOW TRUST OPPORTUNITY' || v === 'LOW_TRUST') return 'lowtrust';
+  if (v === 'SUSPICIOUS') return 'medium';
+  if (v === 'HIGH RISK' || v === 'HIGH_RISK') return 'high';
+  if (v === 'CRITICAL') return 'critical';
+  // Legacy fallback
   if (v === 'SAFE') return 'safe';
-  if (v.includes('LOW')) return 'low';
+  if (v.includes('LOW')) return 'lowtrust';
   if (v.includes('MEDIUM')) return 'medium';
   if (v.includes('HIGH')) return 'high';
   if (v.includes('CRITICAL')) return 'critical';
@@ -1183,9 +1220,9 @@ function verdictTier(verdict) {
 }
 
 function scoreToVerdict(score) {
-  if (score < 20) return 'SAFE';
-  if (score < 40) return 'LOW RISK';
-  if (score < 55) return 'MEDIUM RISK';
+  if (score < 20) return 'LEGITIMATE';
+  if (score < 40) return 'LOW TRUST OPPORTUNITY';
+  if (score < 55) return 'SUSPICIOUS';
   if (score < 75) return 'HIGH RISK';
   return 'CRITICAL';
 }

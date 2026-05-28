@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import agents.behavior_agent as behavior_agent
 import agents.osint_agent as osint_agent
 import agents.domain_agent as domain_agent
+import agents.reputation_agent as reputation_agent
 import agents.consensus_agent as consensus_agent
 from auth.middleware import optional_user
 from auth.routes import router as auth_router
@@ -197,17 +198,32 @@ async def _run_investigation(
     )
     yield _sse("agent_result", {"agent": "web", "result": web_reputation_result})
 
+    # Step 5b: Reputation Intelligence — evaluates educational value, exploitation signals,
+    # certificate farming, and public trust quality (separate from fraud detection)
+    yield _sse("progress", {"step": "reputation", "message": "Launching Agent<ReputationIntel>…"})
+    yield _sse("progress", {"step": "reputation", "message": "Evaluating educational value, trust quality, and exploitation signals…"})
+    reputation_result = await loop.run_in_executor(
+        None,
+        lambda: reputation_agent.run(
+            analysis_text,
+            osint_result=osint_result,
+            web_reputation=web_reputation_result,
+        ),
+    )
+    yield _sse("agent_result", {"agent": "reputation", "result": reputation_result})
+
     # Step 6: Consensus
-    yield _sse("progress", {"step": "consensus", "message": "Launching Agent<RiskSynthesis>…"})
-    yield _sse("progress", {"step": "consensus", "message": "Running consensus analysis and forming final verdict…"})
+    yield _sse("progress", {"step": "consensus", "message": "Launching Agent<TrustSynthesis>…"})
+    yield _sse("progress", {"step": "consensus", "message": "Synthesizing trust intelligence and forming final verdict…"})
     consensus_result = await loop.run_in_executor(
         None,
         lambda: consensus_agent.run(
             behavior_result,
             osint_result,
             domain_result,
-            image_analysis,
-            web_reputation_result,
+            reputation=reputation_result,
+            image_analysis=image_analysis,
+            web_reputation=web_reputation_result,
         ),
     )
 
@@ -231,13 +247,14 @@ async def _run_investigation(
     )
     yield _sse("agent_result", {"agent": "opencode", "result": opencode_result})
 
-    final_consensus = _merge_opencode_verdict(consensus_result, opencode_result, web_reputation_result)
+    final_consensus = _merge_opencode_verdict(consensus_result, opencode_result, web_reputation_result, reputation_result)
     technical = {
         "behavior": behavior_result,
         "osint": osint_result,
         "domain": domain_result,
         "image": image_analysis,
         "web": web_reputation_result,
+        "reputation": reputation_result,
         "opencode": opencode_result,
     }
     record = _build_investigation_record(
@@ -261,6 +278,7 @@ async def _run_investigation(
             "domain": domain_result,
             "image": image_analysis,
             "web": web_reputation_result,
+            "reputation": reputation_result,
             "opencode": opencode_result,
         },
     })
@@ -349,94 +367,120 @@ def _merge_text_and_image_extraction(text: str, image_analysis: dict | None) -> 
     return "\n\n".join(parts) or "(image-only evidence; extraction unavailable)"
 
 
-def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dict | None = None) -> dict:
+def _merge_opencode_verdict(
+    consensus: dict,
+    opencode: dict,
+    web_reputation: dict | None = None,
+    reputation: dict | None = None,
+) -> dict:
+    """Merge OpenCode trust tier with consensus, applying nuanced trust-tier logic."""
     merged = dict(consensus)
 
-    # --- Web reputation escalation ---
+    # Trust tier ordering — higher index = worse trust
+    _TIERS = ["LEGITIMATE", "LOW TRUST OPPORTUNITY", "SUSPICIOUS", "HIGH RISK", "CRITICAL"]
+
+    def _tier_rank(v: str) -> int:
+        v = v.upper().strip()
+        for i, t in enumerate(_TIERS):
+            if v == t or v == t.replace(" ", "_"):
+                return i
+        # Legacy binary vocab mapping
+        if "CRITICAL" in v: return 4
+        if "HIGH" in v: return 3
+        if "SUSPICIOUS" in v or "MEDIUM" in v or "UNCERTAIN" in v: return 2
+        if "LOW" in v or "LOW_TRUST" in v: return 1
+        if "SAFE" in v or "NOT SCAM" in v or "LEGITIMATE" in v: return 0
+        return 2  # default: suspicious
+
+    def _rank_to_verdict(rank: int) -> str:
+        return _TIERS[max(0, min(rank, len(_TIERS) - 1))]
+
+    current_rank = _tier_rank(merged.get("verdict", "SUSPICIOUS"))
+
+    # --- Web reputation input ---
     if web_reputation:
         web_conclusion = str(web_reputation.get("conclusion", "")).upper()
         registered_but_suspicious = web_reputation.get("registered_but_suspicious", False)
-        web_signals = [str(s) for s in (web_reputation.get("scam_signals") or [])]
+        cert_farming = web_reputation.get("certificate_farming_signals", False)
+        web_scam_signals = [str(s) for s in (web_reputation.get("scam_signals") or [])]
+        exploitation_signals = [str(s) for s in (web_reputation.get("exploitation_signals") or [])]
         web_summary = web_reputation.get("summary", "")
 
-        if web_conclusion == "SCAM":
-            # Escalate: if already HIGH RISK or CRITICAL, push to CRITICAL
-            if merged.get("verdict") in {"HIGH RISK", "CRITICAL"}:
-                merged["verdict"] = "CRITICAL"
-            else:
-                merged["verdict"] = "HIGH RISK"
-            if web_signals:
-                existing = merged.get("why_flagged") or []
-                merged["why_flagged"] = list(dict.fromkeys([*existing, *web_signals]))[:8]
-            if web_summary:
-                merged["reasoning"] = (
-                    f"{merged.get('reasoning', '')} Web reputation: {web_summary}"
-                ).strip()
+        web_rank = _tier_rank(web_conclusion)
+        # Blend: push verdict toward web rank but cap escalation at +1 tier
+        if web_rank > current_rank:
+            current_rank = min(current_rank + 1, web_rank)
 
-        elif web_conclusion == "UNCERTAIN" and web_signals:
-            # Uncertain + has scam signals = at least MEDIUM RISK
-            current = merged.get("verdict", "")
-            if current in {"SAFE", "LOW RISK"}:
-                merged["verdict"] = "MEDIUM RISK"
-                merged["confidence"] = min(merged.get("confidence", 50), 60)
+        if cert_farming and current_rank < 2:
+            current_rank = max(current_rank, 1)  # at least LOW_TRUST
+
+        if registered_but_suspicious and current_rank < 1:
+            current_rank = 1  # at least LOW_TRUST
+
+        if web_scam_signals:
             existing = merged.get("why_flagged") or []
-            merged["why_flagged"] = list(dict.fromkeys([*existing, *web_signals]))[:8]
-            if web_summary:
-                merged["reasoning"] = (
-                    f"{merged.get('reasoning', '')} Web uncertainty: {web_summary}"
-                ).strip()
+            merged["why_flagged"] = list(dict.fromkeys([*existing, *web_scam_signals]))[:8]
+        if exploitation_signals:
+            existing = merged.get("exploitation_signals") or []
+            merged["exploitation_signals"] = list(dict.fromkeys([*existing, *exploitation_signals]))[:6]
+        if web_summary:
+            merged["reasoning"] = f"{merged.get('reasoning', '')} Web: {web_summary}".strip()
 
-        if registered_but_suspicious:
-            # Company is real but web/OSINT shows suspicious internship activity
-            current = merged.get("verdict", "")
-            if current in {"SAFE", "LOW RISK"}:
-                merged["verdict"] = "MEDIUM RISK"
-            elif current == "MEDIUM RISK":
-                merged["verdict"] = "HIGH RISK"
-            reg_flag = "Company appears registered but web searches flag suspicious internship activity"
+    # --- Reputation agent input ---
+    if reputation:
+        rep_trust_tier = reputation.get("trust_tier", "")
+        rep_rank = _tier_rank(rep_trust_tier) if rep_trust_tier else 2
+        exploitation = [str(s) for s in (reputation.get("exploitation_signals") or [])]
+
+        # Reputation can lower verdict (toward safer) but not escalate past HIGH RISK
+        if rep_rank != current_rank:
+            # Average toward reputation rank, capped conservatively
+            blended = (current_rank + rep_rank) // 2
+            # Reputation alone can't push past HIGH RISK (rank 3) — requires fraud evidence
+            current_rank = min(blended, 3) if current_rank < 3 else current_rank
+
+        if exploitation:
+            existing = merged.get("exploitation_signals") or []
+            merged["exploitation_signals"] = list(dict.fromkeys([*existing, *exploitation]))[:6]
+
+    # --- OpenCode final review ---
+    if opencode and not opencode.get("error"):
+        oc_conclusion = str(opencode.get("conclusion", "")).upper()
+        if oc_conclusion:
+            oc_rank = _tier_rank(oc_conclusion)
+            # OpenCode is authoritative — allow it to push up OR down by up to 1 tier
+            if oc_rank > current_rank:
+                current_rank = min(current_rank + 1, oc_rank)
+            elif oc_rank < current_rank:
+                current_rank = max(current_rank - 1, oc_rank)
+
+        confidence = opencode.get("confidence")
+        if isinstance(confidence, (int, float)):
+            normalized = confidence * 100 if 0 <= confidence <= 1 else confidence
+            merged["confidence"] = max(0, min(100, int(normalized)))
+
+        summary = opencode.get("summary")
+        if summary:
+            merged["headline"] = _first_sentence(str(summary)) or merged.get("headline", "")
+            merged["reasoning"] = f"{merged.get('reasoning', '')} OpenCode: {summary}".strip()
+
+        evidence = opencode.get("key_evidence")
+        if isinstance(evidence, list) and evidence:
             existing = merged.get("why_flagged") or []
-            if reg_flag not in existing:
-                merged["why_flagged"] = [reg_flag, *existing][:8]
+            merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(e) for e in evidence]]))[:8]
 
-    # --- OpenCode final review override ---
-    if not opencode or opencode.get("error"):
-        return merged
+        oc_exploitation = opencode.get("exploitation_signals") or []
+        if oc_exploitation:
+            existing = merged.get("exploitation_signals") or []
+            merged["exploitation_signals"] = list(dict.fromkeys([*existing, *[str(e) for e in oc_exploitation]]))[:6]
 
-    conclusion = str(opencode.get("conclusion", "")).upper()
-    if not conclusion:
-        return merged
+        action = opencode.get("recommended_action")
+        if action:
+            merged["recommendation"] = str(action)
 
-    if conclusion == "SCAM":
-        if consensus.get("verdict") in {"HIGH RISK", "CRITICAL"}:
-            merged["verdict"] = "CRITICAL"
-        else:
-            merged["verdict"] = "HIGH RISK"
-    elif conclusion == "NOT SCAM" and consensus.get("verdict") in {"SAFE", "LOW RISK", "MEDIUM RISK"}:
-        # Only clear to SAFE if web reputation also agrees (no scam signals)
-        web_rep_clean = not (web_reputation or {}).get("scam_signals")
-        if web_rep_clean and not (web_reputation or {}).get("registered_but_suspicious"):
-            merged["verdict"] = "SAFE"
+        merged["opencode_provider"] = opencode.get("provider")
 
-    confidence = opencode.get("confidence")
-    if isinstance(confidence, (int, float)):
-        normalized_confidence = confidence * 100 if 0 <= confidence <= 1 else confidence
-        merged["confidence"] = max(0, min(100, int(normalized_confidence)))
-
-    summary = opencode.get("summary")
-    if summary:
-        merged["headline"] = _first_sentence(str(summary)) or merged.get("headline", "")
-        merged["reasoning"] = f"{merged.get('reasoning', '')} OpenCode review: {summary}".strip()
-
-    evidence = opencode.get("key_evidence")
-    if isinstance(evidence, list) and evidence:
-        existing = merged.get("why_flagged") or []
-        merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in evidence]]))[:8]
-
-    action = opencode.get("recommended_action")
-    if action:
-        merged["recommendation"] = str(action)
-
-    merged["opencode_provider"] = opencode.get("provider")
+    merged["verdict"] = _rank_to_verdict(current_rank)
     return merged
 
 

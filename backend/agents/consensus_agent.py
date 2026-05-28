@@ -1,6 +1,9 @@
 """
-Consensus Agent — merges all agent signals into a final verdict.
+Consensus Agent — merges all agent signals into a final trust verdict.
 Uses NVIDIA NIM for final reasoning synthesis.
+
+UPGRADED: Now produces multi-dimensional trust intelligence verdicts
+instead of binary scam/not-scam classification.
 """
 
 import time
@@ -8,59 +11,105 @@ import json
 from providers.nvidia_client import reason, model_name as nvidia_model
 from utils.json_recovery import recover_json
 
-SYSTEM_PROMPT = """You are a senior recruitment fraud analyst synthesizing evidence from multiple intelligence agents.
+SYSTEM_PROMPT = """You are a Senior Recruitment Trust Intelligence Analyst.
+
+You synthesize evidence from multiple AI agents to produce a nuanced, multi-dimensional
+trust verdict — NOT a binary scam/not-scam classification.
 
 You will receive:
-- Behavior analysis (LLM-based)
-- OSINT findings (LLM-based — includes company legitimacy assessment and internship-specific flags)
-- Domain intelligence (deterministic)
-- Optional: structured image extraction (Pollinations vision/OCR)
-- Optional: Web reputation search across Glassdoor, AmbitionBox, Reddit, Quora, and scam reports
-  (includes REAL web snippets from actual searches — treat these as ground truth)
+- Behavior analysis (LLM-based): fraud signal detection
+- OSINT findings (LLM-based): company legitimacy + onboarding assessment
+- Domain intelligence (deterministic): domain trust signals
+- Reputation intelligence (LLM-based): educational value, exploitation signals, public trust
+- Optional: image extraction (Pollinations vision/OCR)
+- Optional: web reputation search (Glassdoor, AmbitionBox, Reddit, Quora)
 
-CRITICAL RULES FOR ACCURACY:
-1. "Company is registered" is NOT a safe signal. Scammers routinely misuse real registered companies.
-2. If web_reputation.registered_but_suspicious = true, treat this as a HIGH RISK escalation.
-3. If ANY web source (Reddit, Quora, scam-report) shows a complaint about THIS company's internship
-   asking for UPI, deposit, or certificate-based schemes, escalate to HIGH RISK or CRITICAL.
-4. If behavior_analysis shows payment/deposit/Telegram signals AND web searches show no legitimate
-   hiring evidence, escalate to CRITICAL.
-5. Never give SAFE or LOW RISK if:
-   - Deposits or UPI payments are mentioned
-   - Telegram-only onboarding is the only contact method
-   - OSINT flags company_legitimacy as REAL_BUT_SUSPICIOUS or IMPERSONATION
-   - Web reputation conclusion is SCAM or registered_but_suspicious is true
+== THE 5 TRUST TIERS ==
 
-Produce a final verdict. Return ONLY a JSON object:
+1. LEGITIMATE
+   Trusted company, professional hiring, strong public reputation, safe onboarding.
+   Example: Google, Microsoft, Amazon, well-regarded local companies.
+
+2. LOW TRUST OPPORTUNITY
+   Technically legal, but: weak educational value, mass onboarding, certificate-farming,
+   poor mentorship reputation, no meaningful learning. NOT a scam, but NOT recommended
+   for career growth unless the student only wants a certificate.
+   Example: Mass virtual internship providers, certificate-focused platforms.
+
+3. SUSPICIOUS
+   Mixed signals. Inconsistent reputation, unusual onboarding, unclear legitimacy.
+   Cannot be classified as safe OR as scam/high-risk with current evidence.
+
+4. HIGH RISK
+   Strong scam indicators: payment coercion, phishing domain, fake recruiter,
+   impersonation, OR multiple severe exploitation patterns.
+
+5. CRITICAL
+   Active fraud: payment extraction, phishing infrastructure, typo-squatting,
+   financial extraction attempt, malicious onboarding.
+
+== TRUST DIMENSIONS TO WEIGH ==
+
+LEGITIMACY: Company registration, valid domain, official contact channels
+REPUTATION: Public reviews, Reddit/Glassdoor/AmbitionBox sentiment, scam discussions
+EDUCATIONAL VALUE: Real learning, mentorship, structured work vs certificate farming
+FINANCIAL SAFETY: Payment requests, UPI, fees, equipment purchase
+OPERATIONAL PROFESSIONALISM: Interview quality, communication, offer letter standards
+
+== CRITICAL CALIBRATION RULES ==
+
+DO NOT classify as HIGH RISK or CRITICAL unless:
+- Money extraction / payment coercion is present
+- Phishing domain or impersonation is found
+- Active fraud indicators are confirmed
+
+DO classify as LOW TRUST OPPORTUNITY when:
+- Company is registered and not phishing
+- But reputation shows mass hiring, certificate farming, poor mentorship
+- Or educational value is very low despite no fraud
+
+DO classify as SUSPICIOUS when:
+- Mixed signals exist
+- Cannot confirm legitimacy OR fraud
+- Reputation is unclear
+
+SAFE SIGNALS that should reduce risk significantly:
+- Official company domain (not free/suspicious TLD)
+- No payment request mentioned anywhere
+- Verified company registration
+- Standard multi-round interview process
+- Professional offer letter structure
+- Positive public reviews on reputable platforms
+
+Return ONLY valid JSON:
 {
-  "verdict": "<one of: SAFE | LOW RISK | MEDIUM RISK | HIGH RISK | CRITICAL>",
+  "verdict": "<LEGITIMATE | LOW TRUST OPPORTUNITY | SUSPICIOUS | HIGH RISK | CRITICAL>",
   "confidence": <integer 0-100>,
-  "headline": "<one sentence headline for this case>",
-  "why_flagged": ["specific reason 1 — cite which agent found it", "specific reason 2"],
-  "safe_signals": ["reassuring signal 1"],
+  "headline": "<one sentence headline summarizing the trust assessment>",
+  "trust_dimensions": {
+    "legitimacy": <0-100>,
+    "reputation": <0-100>,
+    "educational_value": <0-100>,
+    "financial_safety": <0-100>,
+    "professionalism": <0-100>
+  },
+  "why_flagged": ["specific reason 1 — cite which agent found it", "reason 2"],
+  "safe_signals": ["reassuring signal 1", "signal 2"],
+  "exploitation_signals": ["exploitation pattern found, if any"],
   "recommendation": "<clear 1-2 sentence actionable advice>",
-  "reasoning": "<3-4 sentence explanation of the synthesis — reference actual evidence>"
-}
-
-Scoring guide:
-- SAFE: No red flags, official channels, standard multi-round process, confirmed employer reputation
-- LOW RISK: Minor concerns but mostly legitimate indicators, verify via official company page
-- MEDIUM RISK: Mixed signals, one or two suspicious patterns, exercise caution
-- HIGH RISK: Multiple fraud indicators OR web complaints about this company's internships
-- CRITICAL: Clear and present scam — payment/deposit/Telegram + no legitimate hiring evidence"""
+  "reasoning": "<3-4 sentence explanation citing actual evidence>"
+}"""
 
 
 def run(
     behavior: dict,
     osint: dict,
     domain: dict,
+    reputation: dict | None = None,
     image_analysis: dict | str | None = None,
     web_reputation: dict | None = None,
 ) -> dict:
-    """
-    Synthesize all agent outputs into a final verdict.
-    Returns consensus dict.
-    """
+    """Synthesize all agent outputs into a final trust verdict."""
     start = time.time()
 
     evidence = {
@@ -86,114 +135,165 @@ def run(
         },
     }
 
+    if reputation:
+        evidence["reputation_intelligence"] = {
+            "trust_tier": reputation.get("trust_tier", ""),
+            "educational_value_score": reputation.get("educational_value_score", 50),
+            "overall_trust_score": reputation.get("overall_trust_score", 50),
+            "exploitation_signals": reputation.get("exploitation_signals", []),
+            "certificate_farming_detected": reputation.get("certificate_farming_detected", False),
+            "mass_hiring_detected": reputation.get("mass_hiring_detected", False),
+            "financial_risk": reputation.get("financial_risk", False),
+            "educational_value_assessment": reputation.get("educational_value_assessment", "unknown"),
+            "trust_summary": reputation.get("trust_summary", ""),
+        }
+
     if image_analysis:
         evidence["image_analysis"] = image_analysis
     if web_reputation:
-        evidence["web_reputation"] = web_reputation
+        evidence["web_reputation"] = {
+            "conclusion": web_reputation.get("conclusion", ""),
+            "registered_but_suspicious": web_reputation.get("registered_but_suspicious", False),
+            "scam_signals": web_reputation.get("scam_signals", []),
+            "safe_signals": web_reputation.get("safe_signals", []),
+            "summary": web_reputation.get("summary", ""),
+        }
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": f"Synthesize this evidence into a final verdict:\n\n{json.dumps(evidence, indent=2)}",
+            "content": f"Synthesize this multi-dimensional evidence into a trust verdict:\n\n{json.dumps(evidence, indent=2)}",
         },
     ]
 
     try:
-        raw = reason(messages, max_tokens=900)
+        raw = reason(messages, max_tokens=1000)
         parsed = recover_json(raw)
         if not parsed:
-            # Fallback: compute from raw scores
-            avg_score = (
-                behavior.get("risk_score", 0)
-                + osint.get("risk_score", 0)
-                + domain.get("risk_score", 5)
-            ) // 3
-            verdict = _score_to_verdict(avg_score)
-            return {
-                "verdict": verdict,
-                "confidence": 50,
-                "headline": f"Analysis complete — {verdict}",
-                "why_flagged": behavior.get("signals", [])[:3],
-                "safe_signals": behavior.get("safe_indicators", [])[:2],
-                "recommendation": "Review the technical analysis for details.",
-                "reasoning": "Consensus synthesis could not be parsed; verdict estimated from agent scores.",
-                "provider": nvidia_model(),
-                "latency_ms": int((time.time() - start) * 1000),
-                "error": "json_parse_failed",
-            }
+            return _fallback_verdict(behavior, osint, domain, reputation, image_analysis, web_reputation, start)
         parsed["provider"] = nvidia_model()
         parsed["latency_ms"] = int((time.time() - start) * 1000)
         return parsed
     except RuntimeError as e:
-        score = _fallback_score(behavior, osint, domain, image_analysis, web_reputation)
-        verdict = _score_to_verdict(score)
-        why_flagged = _collect_fallback_flags(behavior, domain, image_analysis, web_reputation)
-        return {
-            "verdict": verdict,
-            "confidence": 68 if score >= 55 else 45,
-            "headline": f"Analysis complete — {verdict} (degraded mode)",
-            "why_flagged": why_flagged[:6],
-            "safe_signals": behavior.get("safe_indicators", [])[:2],
-            "recommendation": "Treat this as unresolved risk until the flagged evidence is verified through official company channels. Do not pay fees or continue Telegram-only onboarding.",
-            "reasoning": f"Primary consensus model failed: {e}. Degraded verdict was computed from behavior, domain, image, and web reputation scores instead of defaulting to SAFE.",
-            "provider": nvidia_model(),
-            "latency_ms": int((time.time() - start) * 1000),
-            "error": str(e),
-        }
+        result = _fallback_verdict(behavior, osint, domain, reputation, image_analysis, web_reputation, start)
+        result["error"] = str(e)
+        return result
 
 
-def _score_to_verdict(score: int) -> str:
-    if score < 20:
-        return "SAFE"
-    if score < 40:
-        return "LOW RISK"
-    if score < 55:
-        return "MEDIUM RISK"
-    if score < 75:
+def _verdict_from_scores(
+    behavior_score: int,
+    osint_score: int,
+    domain_score: int,
+    reputation_trust_score: int,
+    financial_risk: bool,
+    exploitation_count: int,
+    web_conclusion: str,
+) -> str:
+    """Map multi-dimensional signals to a trust verdict."""
+    # CRITICAL: Active fraud
+    if financial_risk and (behavior_score >= 70 or web_conclusion == "SCAM"):
+        return "CRITICAL"
+
+    # HIGH RISK: Strong fraud indicators
+    if financial_risk or web_conclusion == "SCAM" or behavior_score >= 75 or domain_score >= 75:
         return "HIGH RISK"
-    return "CRITICAL"
+
+    # Compute composite trust score
+    composite = (behavior_score * 0.3 + osint_score * 0.25 + domain_score * 0.15 +
+                 (100 - reputation_trust_score) * 0.3)
+
+    if composite >= 70:
+        return "HIGH RISK"
+    if composite >= 50 or exploitation_count >= 2:
+        return "SUSPICIOUS"
+    if exploitation_count >= 1 or reputation_trust_score < 45:
+        return "LOW TRUST OPPORTUNITY"
+    if composite < 20 and reputation_trust_score >= 65:
+        return "LEGITIMATE"
+    return "SUSPICIOUS"
 
 
-def _fallback_score(
+def _fallback_verdict(
     behavior: dict,
     osint: dict,
     domain: dict,
+    reputation: dict | None,
     image_analysis: dict | str | None,
     web_reputation: dict | None,
-) -> int:
-    scores = [
-        int(behavior.get("risk_score", 0) or 0),
-        int(osint.get("risk_score", 0) or 0),
-        int(domain.get("risk_score", 5) or 5),
-    ]
+    start: float,
+) -> dict:
+    """Deterministic fallback when the LLM fails."""
+    behavior_score = int(behavior.get("risk_score", 0) or 0)
+    osint_score = int(osint.get("risk_score", 0) or 0)
+    domain_score = int(domain.get("risk_score", 5) or 5)
+    reputation_trust_score = int((reputation or {}).get("overall_trust_score", 50) or 50)
+    financial_risk = bool((reputation or {}).get("financial_risk", False))
+    exploitation_count = len((reputation or {}).get("exploitation_signals", []))
+    web_conclusion = str((web_reputation or {}).get("conclusion", "")).upper()
+
+    # Image escalation
     if isinstance(image_analysis, dict):
-        scores.append(int(image_analysis.get("risk_score", 0) or 0))
         if str(image_analysis.get("scam_conclusion", "")).upper() == "SCAM":
-            scores.append(90)
+            behavior_score = max(behavior_score, 80)
+        img_score = image_analysis.get("risk_score")
+        if isinstance(img_score, (int, float)):
+            behavior_score = max(behavior_score, int(img_score))
+
+    verdict = _verdict_from_scores(
+        behavior_score, osint_score, domain_score, reputation_trust_score,
+        financial_risk, exploitation_count, web_conclusion
+    )
+
+    # Collect flags
+    flags = [str(s) for s in behavior.get("signals", [])]
+    flags += [str(s) for s in domain.get("all_signals", [])]
+    if reputation:
+        flags += [str(s) for s in reputation.get("exploitation_signals", [])]
+        flags += [str(s) for s in reputation.get("why_flagged", [])]
     if web_reputation:
-        if str(web_reputation.get("conclusion", "")).upper() == "SCAM":
-            scores.append(90)
-        confidence = web_reputation.get("confidence")
-        if isinstance(confidence, (int, float)):
-            scores.append(int(confidence * 100 if 0 <= confidence <= 1 else confidence))
-    return max(scores)
-
-
-def _collect_fallback_flags(
-    behavior: dict,
-    domain: dict,
-    image_analysis: dict | str | None,
-    web_reputation: dict | None,
-) -> list[str]:
-    flags = [str(item) for item in behavior.get("signals", [])]
-    flags.extend(str(item) for item in domain.get("all_signals", []))
+        flags += [str(s) for s in web_reputation.get("scam_signals", [])]
     if isinstance(image_analysis, dict):
-        flags.extend(str(item) for item in image_analysis.get("red_flags", []))
-        if image_analysis.get("error"):
-            flags.append(f"Image extraction degraded: {image_analysis['error']}")
+        flags += [str(s) for s in image_analysis.get("red_flags", [])]
+
+    safe = [str(s) for s in behavior.get("safe_indicators", [])]
+    if reputation:
+        safe += [str(s) for s in reputation.get("safe_signals", [])]
     if web_reputation:
-        flags.extend(str(item) for item in web_reputation.get("scam_signals", []))
-        if web_reputation.get("error"):
-            flags.append(f"Web reputation degraded: {web_reputation['error']}")
-    return list(dict.fromkeys(flags))
+        safe += [str(s) for s in web_reputation.get("safe_signals", [])]
+
+    exploitation = list(dict.fromkeys([str(s) for s in (reputation or {}).get("exploitation_signals", [])]))
+
+    rec = (
+        "Do not proceed. Stop all engagement and do not share personal or financial information."
+        if verdict == "CRITICAL"
+        else "Exercise strong caution. Independently verify through official company channels before sharing documents or data."
+        if verdict == "HIGH RISK"
+        else "Verify this opportunity carefully. Check if real learning, mentorship, and structured work are offered before committing your time."
+        if verdict in ("SUSPICIOUS", "LOW TRUST OPPORTUNITY")
+        else "This opportunity appears trustworthy. Confirm details through official company channels before proceeding."
+    )
+
+    return {
+        "verdict": verdict,
+        "confidence": 55,
+        "headline": f"Trust assessment complete — {verdict} (degraded mode)",
+        "trust_dimensions": {
+            "legitimacy": max(0, 100 - osint_score),
+            "reputation": max(0, 100 - (len(flags) * 10)),
+            "educational_value": reputation_trust_score if reputation else 50,
+            "financial_safety": 20 if financial_risk else 85,
+            "professionalism": max(0, 100 - behavior_score),
+        },
+        "why_flagged": list(dict.fromkeys(flags))[:6],
+        "safe_signals": list(dict.fromkeys(safe))[:4],
+        "exploitation_signals": exploitation[:4],
+        "recommendation": rec,
+        "reasoning": (
+            f"Degraded mode: consensus LLM failed. Verdict estimated from behavior score {behavior_score}, "
+            f"OSINT score {osint_score}, domain score {domain_score}, and reputation trust score {reputation_trust_score}."
+        ),
+        "provider": nvidia_model(),
+        "latency_ms": int((time.time() - start) * 1000),
+        "error": "json_parse_failed",
+    }
