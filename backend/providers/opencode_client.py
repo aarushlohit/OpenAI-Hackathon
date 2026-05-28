@@ -407,7 +407,7 @@ def _has_positive_payment_signal(text: str, term: str) -> bool:
 def _fallback_reputation(evidence: dict[str, Any]) -> dict[str, Any]:
     text = _flatten_evidence(evidence)
     scam_terms = ["upi", "telegram", "whatsapp", "no interview", "refundable", ".xyz"]
-    safe_terms = ["no payment", "no deposit", "official", "codsoft.in", "contact@"]
+    safe_terms = ["no payment", "no deposit", "official", "techcorp.com", "contact@"]
     scam_hits = [term for term in scam_terms if term in text]
     if _has_positive_payment_signal(text, "deposit"):
         scam_hits.append("deposit")

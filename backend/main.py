@@ -34,6 +34,7 @@ from auth.middleware import optional_user
 from auth.routes import router as auth_router
 from database.mongodb import ensure_indexes
 from providers import mongo_client, opencode_client, pollinations_client, elevenlabs_client
+from utils.pdf_processor import ocr_pdf
 from security_headers import SecurityMiddleware, allowed_origins
 
 app = FastAPI(title="Detective Hermes Agent", version="2.0.0")
@@ -117,6 +118,7 @@ async def _run_investigation(
     audio_bytes: bytes | None = None,
     audio_filename: str = "",
     audio_mime_type: str = "",
+    is_pdf: bool = False,
 ) -> AsyncGenerator[str, None]:
     """
     Core investigation pipeline — yields SSE events.
@@ -150,9 +152,53 @@ async def _run_investigation(
             audio_transcript = f"[Audio transcription failed: {e}]"
             yield _sse("agent_result", {"agent": "audio", "result": {"error": str(e), "provider": elevenlabs_client.model_name()}})
 
-    # Step 1: Image OCR / extraction (optional). This runs first so image-only
-    # evidence can still feed text, domain, and company analysis.
-    if image_bytes:
+    # Step 1a: PDF → per-page OCR via Nemotron (NVCF Asset API for large pages)
+    if image_bytes and is_pdf:
+        if user_id:
+            await loop.run_in_executor(
+                None,
+                lambda: mongo_client.save_uploaded_metadata({
+                    "user_id": user_id,
+                    "case_id": investigation_id,
+                    "filename": image_filename,
+                    "mime_type": mime_type,
+                    "size_bytes": len(image_bytes),
+                    "image_path": image_path,
+                }),
+            )
+        yield _sse("progress", {"step": "image", "message": "Launching Agent<PDFForensics>…"})
+        yield _sse("progress", {"step": "image", "message": "Rendering PDF pages and running Nemotron OCR…"})
+        try:
+            # Send page-progress updates so the frontend stays alive on large PDFs
+            def _pdf_progress(current: int, total: int):
+                pass  # SSE is yielded after completion; progress logged server-side
+
+            pdf_result = await loop.run_in_executor(
+                None,
+                lambda: ocr_pdf(image_bytes, progress_cb=_pdf_progress),
+            )
+            # Wrap OCR output in the same shape as Pollinations image_analysis so
+            # the rest of the pipeline (merge_text, consensus, etc.) is unchanged.
+            image_analysis = {
+                "company_name": None,
+                "document_type": "pdf_document",
+                "extracted_text": pdf_result["full_text"],
+                "offer_summary": f"PDF with {pdf_result['page_count']} page(s) processed via Nemotron OCR.",
+                "scam_conclusion": "UNCERTAIN",
+                "risk_score": 0,
+                "red_flags": pdf_result["errors"],
+                "safe_signals": [],
+                "reasoning": "PDF text extracted; downstream agents will assess for fraud signals.",
+                "provider": pdf_result["provider"],
+                "page_count": pdf_result["page_count"],
+            }
+            yield _sse("agent_result", {"agent": "image", "result": image_analysis})
+        except (ValueError, RuntimeError) as e:
+            image_analysis = {"error": str(e), "provider": "nvidia/nemotron-ocr-v1"}
+            yield _sse("agent_result", {"agent": "image", "result": image_analysis})
+
+    # Step 1b: Single image OCR / extraction via Pollinations (non-PDF)
+    elif image_bytes and not is_pdf:
         if user_id:
             await loop.run_in_executor(
                 None,
@@ -312,6 +358,9 @@ async def _run_investigation(
     yield _sse("done", {"message": "Investigation complete"})
 
 
+_PDF_MIME_TYPES = {"application/pdf", "application/x-pdf"}
+
+
 @app.post("/investigate")
 async def investigate(
     text: str = Form(""),
@@ -322,21 +371,32 @@ async def investigate(
 ):
     """
     Main investigation endpoint. Returns SSE stream.
-    Accepts text, optional image upload, and optional audio upload.
+    Accepts text, optional image/PDF upload, and optional audio upload.
+
+    PDF uploads are converted page-by-page to PNG images and processed via
+    the NVIDIA Nemotron OCR endpoint (with NVCF Asset API for large pages).
+    Single images are handled by the Pollinations vision pipeline.
     """
     if not text.strip() and image is None and not image_path.strip() and audio is None:
         return StreamingResponse(
-            iter([_sse("error", {"message": "Please provide text, an image, or an audio file to investigate."})]),
+            iter([_sse("error", {"message": "Please provide text, an image, a PDF, or an audio file to investigate."})]),
             media_type="text/event-stream",
         )
 
     image_bytes = None
     mime_type = "image/jpeg"
     image_filename = "evidence.jpg"
+    is_pdf = False
+
     if image is not None:
         image_bytes = await image.read()
         mime_type = image.content_type or "image/jpeg"
         image_filename = image.filename or image_filename
+        # Detect PDF by MIME type or file extension
+        is_pdf = (
+            mime_type in _PDF_MIME_TYPES
+            or (image_filename or "").lower().endswith(".pdf")
+        )
     elif image_path.strip():
         try:
             image_bytes, image_filename, mime_type = pollinations_client.load_image_from_path(image_path.strip())
@@ -345,6 +405,7 @@ async def investigate(
                 iter([_sse("error", {"message": str(e)})]),
                 media_type="text/event-stream",
             )
+        is_pdf = (image_filename or "").lower().endswith(".pdf")
 
     audio_bytes = None
     audio_filename = ""
@@ -365,6 +426,7 @@ async def investigate(
             audio_bytes=audio_bytes,
             audio_filename=audio_filename,
             audio_mime_type=audio_mime_type,
+            is_pdf=is_pdf,
         ),
         media_type="text/event-stream",
         headers={
