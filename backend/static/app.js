@@ -593,7 +593,7 @@ function renderHermesProgress() {
         ${renderStep('web', 'Searching public reputation…', 'wait')}
         ${renderStep('reputation', 'Evaluating educational value & trust quality…', 'wait')}
         ${renderStep('consensus', 'Synthesizing trust intelligence…', 'wait')}
-        ${renderStep('opencode', 'Final trust review via OpenCode…', 'wait')}
+        ${renderStep('opencode', 'Final trust review via AI REASONING…', 'wait')}
       </div>
     </div>
   `;
@@ -627,7 +627,7 @@ const STEP_LABELS = {
   web: 'Searching Glassdoor, AmbitionBox, Reddit, and scam reports…',
   reputation: 'Evaluating educational value, trust quality, and exploitation signals…',
   consensus: 'Synthesizing trust intelligence and forming final verdict…',
-  opencode: 'Final trust review via OpenCode DeepSeek…',
+  opencode: 'Final trust review via AI REASONING…',
 };
 
 function updateProgressStep(stepId, message) {
@@ -923,8 +923,7 @@ function buildTechPanel(technical, consensus) {
     sections.push(`
       <div class="tech-section">
         <div class="tech-section-title">
-          OpenCode DeepSeek Review
-          <span class="tech-latency">${escapeHtml(o.provider || '')}</span>
+          AI REASONING
         </div>
         <div class="tech-content">
           ${o.error ? `<div class="error-inline">${escapeHtml(o.error)}</div>` : ''}
@@ -934,7 +933,6 @@ function buildTechPanel(technical, consensus) {
           ${o.summary ? `<div style="margin-top:8px;color:var(--text-muted)">${escapeHtml(o.summary)}</div>` : ''}
           ${evidence ? `<div style="margin-top:8px">${evidence}</div>` : ''}
           ${o.recommended_action ? `<div class="verdict-recommendation rec-${verdictTier(o.conclusion === 'SCAM' ? 'HIGH RISK' : 'LOW RISK')}" style="margin-top:8px">${escapeHtml(o.recommended_action)}</div>` : ''}
-          ${o.api_url ? `<div style="margin-top:8px;color:var(--text-muted)">${escapeHtml(o.api_url)}</div>` : ''}
         </div>
       </div>
     `);

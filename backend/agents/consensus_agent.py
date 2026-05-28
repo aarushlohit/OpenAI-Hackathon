@@ -8,7 +8,7 @@ instead of binary scam/not-scam classification.
 
 import time
 import json
-from providers.nvidia_client import reason, model_name as nvidia_model
+from providers.opencode_client import _run_opencode_prompt, OPENCODE_MODEL
 from utils.json_recovery import recover_json
 
 SYSTEM_PROMPT = """You are a Senior Recruitment Trust Intelligence Analyst.
@@ -159,23 +159,19 @@ def run(
             "summary": web_reputation.get("summary", ""),
         }
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": f"Synthesize this multi-dimensional evidence into a trust verdict:\n\n{json.dumps(evidence, indent=2)}",
-        },
-    ]
+    prompt = f"{SYSTEM_PROMPT}\n\nSynthesize this multi-dimensional evidence into a trust verdict:\n\n{json.dumps(evidence, indent=2)}"
 
     try:
-        raw = reason(messages, max_tokens=1000)
-        parsed = recover_json(raw)
-        if not parsed:
-            return _fallback_verdict(behavior, osint, domain, reputation, image_analysis, web_reputation, start)
-        parsed["provider"] = nvidia_model()
-        parsed["latency_ms"] = int((time.time() - start) * 1000)
-        return parsed
-    except RuntimeError as e:
+        result = _run_opencode_prompt(prompt)
+        if result.get("error") or not result.get("verdict"):
+            fallback = _fallback_verdict(behavior, osint, domain, reputation, image_analysis, web_reputation, start)
+            if result.get("error"):
+                fallback["error"] = result["error"]
+            return fallback
+        
+        result["latency_ms"] = int((time.time() - start) * 1000)
+        return result
+    except Exception as e:
         result = _fallback_verdict(behavior, osint, domain, reputation, image_analysis, web_reputation, start)
         result["error"] = str(e)
         return result
@@ -293,7 +289,7 @@ def _fallback_verdict(
             f"Degraded mode: consensus LLM failed. Verdict estimated from behavior score {behavior_score}, "
             f"OSINT score {osint_score}, domain score {domain_score}, and reputation trust score {reputation_trust_score}."
         ),
-        "provider": nvidia_model(),
+        "provider": OPENCODE_MODEL,
         "latency_ms": int((time.time() - start) * 1000),
         "error": "json_parse_failed",
     }

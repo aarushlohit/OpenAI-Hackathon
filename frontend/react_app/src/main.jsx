@@ -18,7 +18,7 @@ const steps = [
   ['domain', 'Domain intelligence'],
   ['web', 'Web reputation'],
   ['consensus', 'Risk synthesis'],
-  ['opencode', 'OpenCode DeepSeek'],
+  ['opencode', 'AI Reasoning'],
 ];
 
 function App() {
@@ -316,7 +316,7 @@ function Tech({ technical = {}, consensus = {} }) {
       <TechBlock title="Behavior Agent" data={technical.behavior} />
       <TechBlock title="Domain Agent" data={technical.domain} />
       <TechBlock title="Web Reputation: Glassdoor, AmbitionBox, Reddit" data={technical.web} />
-      <TechBlock title="OpenCode API Review" data={technical.opencode} />
+      <TechBlock title="AI REASONING" data={technical.opencode} />
       <TechBlock title="Consensus" data={consensus} />
     </div>
   );
@@ -362,8 +362,6 @@ function Settings({ onClear }) {
   return (
     <div className="panel">
       <h1>Settings</h1>
-      <p>OpenCode API endpoint: https://opencode.ai/zen/v1/chat/completions</p>
-      <p>Default model: opencode/deepseek-v4-flash-free</p>
       <p>MongoDB is enabled when the backend has MONGODB_URI set.</p>
       <p>Project name: Detective Hermes Agent</p>
       <button className="danger" onClick={onClear}>Clear local browser data</button>
