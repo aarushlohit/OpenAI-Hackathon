@@ -33,7 +33,7 @@ import agents.consensus_agent as consensus_agent
 from auth.middleware import optional_user
 from auth.routes import router as auth_router
 from database.mongodb import ensure_indexes
-from providers import mongo_client, opencode_client, pollinations_client
+from providers import mongo_client, opencode_client, pollinations_client, elevenlabs_client
 from security_headers import SecurityMiddleware, allowed_origins
 
 app = FastAPI(title="Detective Hermes Agent", version="2.0.0")
@@ -114,6 +114,9 @@ async def _run_investigation(
     image_filename: str = "evidence.jpg",
     image_path: str = "",
     user_id: str | None = None,
+    audio_bytes: bytes | None = None,
+    audio_filename: str = "",
+    audio_mime_type: str = "",
 ) -> AsyncGenerator[str, None]:
     """
     Core investigation pipeline — yields SSE events.
@@ -121,11 +124,31 @@ async def _run_investigation(
     """
     loop = asyncio.get_event_loop()
     image_analysis = None
+    audio_transcript = None
     investigation_id = f"case-{int(time.time() * 1000)}"
 
     yield _sse("progress", {"step": "thinking", "message": "Thinking…"})
     yield _sse("progress", {"step": "pondering", "message": "Pondering evidence boundaries…"})
     yield _sse("progress", {"step": "agents", "message": "Launching agents…"})
+
+    # Step 0: Audio S2T transcription (optional). Runs before other steps
+    # so the transcribed text can feed subsequent text and company analyses.
+    if audio_bytes:
+        yield _sse("progress", {"step": "audio", "message": "Launching Agent<ElevenLabsSTT>…"})
+        yield _sse("progress", {"step": "audio", "message": "Transcribing audio content with ElevenLabs Scribe v2…"})
+        try:
+            audio_transcript = await loop.run_in_executor(
+                None,
+                lambda: elevenlabs_client.transcribe_audio(
+                    audio_bytes,
+                    audio_filename,
+                    audio_mime_type,
+                ),
+            )
+            yield _sse("agent_result", {"agent": "audio", "result": {"text": audio_transcript, "provider": elevenlabs_client.model_name()}})
+        except RuntimeError as e:
+            audio_transcript = f"[Audio transcription failed: {e}]"
+            yield _sse("agent_result", {"agent": "audio", "result": {"error": str(e), "provider": elevenlabs_client.model_name()}})
 
     # Step 1: Image OCR / extraction (optional). This runs first so image-only
     # evidence can still feed text, domain, and company analysis.
@@ -158,7 +181,7 @@ async def _run_investigation(
             image_analysis = {"error": str(e), "provider": pollinations_client.model_name()}
             yield _sse("agent_result", {"agent": "image", "result": image_analysis})
 
-    analysis_text = _merge_text_and_image_extraction(text, image_analysis)
+    analysis_text = _merge_text_audio_and_image_extraction(text, audio_transcript, image_analysis)
 
     # Step 2: Behavior
     yield _sse("progress", {"step": "behavior", "message": "Launching Agent<Behavior>…"})
@@ -253,6 +276,7 @@ async def _run_investigation(
         "osint": osint_result,
         "domain": domain_result,
         "image": image_analysis,
+        "audio": {"text": audio_transcript, "provider": elevenlabs_client.model_name()} if audio_transcript else None,
         "web": web_reputation_result,
         "reputation": reputation_result,
         "opencode": opencode_result,
@@ -265,6 +289,7 @@ async def _run_investigation(
         user_id=user_id,
         image_path=image_path,
         image_filename=image_filename if image_bytes else "",
+        audio_filename=audio_filename if audio_bytes else "",
     )
     storage = await loop.run_in_executor(None, lambda: mongo_client.save_investigation(record))
 
@@ -277,6 +302,7 @@ async def _run_investigation(
             "osint": osint_result,
             "domain": domain_result,
             "image": image_analysis,
+            "audio": {"text": audio_transcript, "provider": elevenlabs_client.model_name()} if audio_transcript else None,
             "web": web_reputation_result,
             "reputation": reputation_result,
             "opencode": opencode_result,
@@ -291,15 +317,16 @@ async def investigate(
     text: str = Form(""),
     image: UploadFile | None = File(None),
     image_path: str = Form(""),
+    audio: UploadFile | None = File(None),
     user: dict[str, Any] | None = Depends(optional_user),
 ):
     """
     Main investigation endpoint. Returns SSE stream.
-    Accepts text and optional image upload.
+    Accepts text, optional image upload, and optional audio upload.
     """
-    if not text.strip() and image is None and not image_path.strip():
+    if not text.strip() and image is None and not image_path.strip() and audio is None:
         return StreamingResponse(
-            iter([_sse("error", {"message": "Please provide text or an image to investigate."})]),
+            iter([_sse("error", {"message": "Please provide text, an image, or an audio file to investigate."})]),
             media_type="text/event-stream",
         )
 
@@ -319,6 +346,14 @@ async def investigate(
                 media_type="text/event-stream",
             )
 
+    audio_bytes = None
+    audio_filename = ""
+    audio_mime_type = ""
+    if audio is not None:
+        audio_bytes = await audio.read()
+        audio_filename = audio.filename or "recording.mp3"
+        audio_mime_type = audio.content_type or "audio/mpeg"
+
     return StreamingResponse(
         _run_investigation(
             text,
@@ -327,6 +362,9 @@ async def investigate(
             image_filename,
             image_path=image_path.strip(),
             user_id=user["id"] if user else None,
+            audio_bytes=audio_bytes,
+            audio_filename=audio_filename,
+            audio_mime_type=audio_mime_type,
         ),
         media_type="text/event-stream",
         headers={
@@ -336,10 +374,12 @@ async def investigate(
     )
 
 
-def _merge_text_and_image_extraction(text: str, image_analysis: dict | None) -> str:
+def _merge_text_audio_and_image_extraction(text: str, audio_transcript: str | None, image_analysis: dict | None) -> str:
     parts = []
     if text.strip():
         parts.append(text.strip())
+    if audio_transcript:
+        parts.append(f"Transcribed audio conversation:\n{audio_transcript}")
     if image_analysis:
         extracted_text = image_analysis.get("extracted_text")
         offer_summary = image_analysis.get("offer_summary")
@@ -364,7 +404,7 @@ def _merge_text_and_image_extraction(text: str, image_analysis: dict | None) -> 
         if image_parts:
             parts.append("\n".join(image_parts))
 
-    return "\n\n".join(parts) or "(image-only evidence; extraction unavailable)"
+    return "\n\n".join(parts) or "(no evidence text, audio, or image extraction available)"
 
 
 def _merge_opencode_verdict(
@@ -498,6 +538,7 @@ def _build_investigation_record(
     user_id: str | None = None,
     image_path: str = "",
     image_filename: str = "",
+    audio_filename: str = "",
 ) -> dict[str, Any]:
     company = (
         (technical.get("image") or {}).get("company_name")
@@ -519,6 +560,7 @@ def _build_investigation_record(
         "input_text": text[:5000],
         "image_path": image_path,
         "image_filename": image_filename,
+        "audio_filename": audio_filename,
         "provider": (
             (technical.get("opencode") or {}).get("provider")
             or (technical.get("web") or {}).get("provider")

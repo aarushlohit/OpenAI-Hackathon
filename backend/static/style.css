@@ -1300,6 +1300,61 @@ html, body {
 }
 .remove-image:hover { background: var(--critical); color: white; }
 
+/* Audio preview */
+.audio-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.audio-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.preview-audio-icon {
+  flex-shrink: 0;
+}
+
+.remove-audio {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.remove-audio:hover {
+  color: var(--critical);
+}
+
+.user-audio-attachment {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) calc(0.12 * 100%), transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+
 /* Composer */
 .composer {
   background: color-mix(in srgb, var(--bg-card) calc(0.96 * 100%), transparent);

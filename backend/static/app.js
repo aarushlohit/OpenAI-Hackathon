@@ -7,6 +7,7 @@
 
 // ── State ──────────────────────────────────────────────────
 let attachedImage = null; // { file, dataUrl, mimeType }
+let attachedAudio = null; // { file, name, size }
 let isInvestigating = false;
 let currentHermesMessageEl = null;
 let agentResults = {}; // Collects all agent data for tech panel
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bootRoute();
   setupTextarea();
   setupImageUpload();
+  setupAudioUpload();
   setupDragDrop();
   setupKeyboardShortcuts();
   checkHealth();
@@ -258,6 +260,30 @@ function setupImageUpload() {
   });
 }
 
+function setupAudioUpload() {
+  const input = $('audioUpload');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    if (input.files[0]) attachAudioFile(input.files[0]);
+  });
+}
+
+function attachAudioFile(file) {
+  attachedAudio = { file, name: file.name, size: file.size };
+  const nameEl = $('audioPreviewName');
+  if (nameEl) nameEl.textContent = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+  const previewEl = $('audioPreview');
+  if (previewEl) previewEl.style.display = 'flex';
+}
+
+function removeAudio() {
+  attachedAudio = null;
+  const previewEl = $('audioPreview');
+  if (previewEl) previewEl.style.display = 'none';
+  const input = $('audioUpload');
+  if (input) input.value = '';
+}
+
 function setupDragDrop() {
   const overlay = $('dragOverlay');
   let dragDepth = 0;
@@ -405,7 +431,7 @@ async function sendInvestigation() {
   if (isInvestigating) return;
 
   const text = $('messageInput').value.trim();
-  if (!text && !attachedImage) return;
+  if (!text && !attachedImage && !attachedAudio) return;
 
   isInvestigating = true;
   $('sendBtn').disabled = true;
@@ -415,13 +441,15 @@ async function sendInvestigation() {
   showConversation();
 
   // Render user message
-  renderUserMessage(text, attachedImage?.dataUrl);
+  renderUserMessage(text, attachedImage?.dataUrl, attachedAudio?.name);
 
   // Clear input
   $('messageInput').value = '';
   $('messageInput').style.height = 'auto';
   const imageToSend = attachedImage;
+  const audioToSend = attachedAudio;
   removeImage();
+  removeAudio();
 
   // Start hermes message with progress steps
   agentResults = {};
@@ -432,6 +460,9 @@ async function sendInvestigation() {
   formData.append('text', text);
   if (imageToSend) {
     formData.append('image', imageToSend.file);
+  }
+  if (audioToSend) {
+    formData.append('audio', audioToSend.file);
   }
 
   // Connect SSE
@@ -510,7 +541,7 @@ function parseSSEEvent(raw) {
 }
 
 // ── Render helpers ─────────────────────────────────────────
-function renderUserMessage(text, imageDataUrl) {
+function renderUserMessage(text, imageDataUrl, audioName) {
   const mc = $('messagesContainer');
   const el = document.createElement('div');
   el.className = 'message user';
@@ -518,6 +549,19 @@ function renderUserMessage(text, imageDataUrl) {
   let html = '';
   if (text) html += `<div class="user-bubble">${escapeHtml(text)}</div>`;
   if (imageDataUrl) html += `<img class="user-image" src="${imageDataUrl}" alt="Attached image" />`;
+  if (audioName) {
+    html += `
+      <div class="user-audio-attachment">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle; color: var(--primary);">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span>${escapeHtml(audioName)}</span>
+      </div>
+    `;
+  }
 
   el.innerHTML = html;
   mc.appendChild(el);
@@ -575,6 +619,7 @@ const STEP_LABELS = {
   thinking: 'Thinking…',
   pondering: 'Pondering evidence boundaries…',
   agents: 'Launching agents…',
+  audio: 'Transcribing audio content with ElevenLabs Scribe v2…',
   behavior: 'Analyzing onboarding flow and communication patterns…',
   osint: 'Verifying company legitimacy and recruiter claims…',
   domain: 'Checking domain trust and typo-squatting indicators…',
@@ -817,6 +862,23 @@ function buildTechPanel(technical, consensus) {
           ${reputationSignals ? `<div style="margin-top:8px"><strong>Reputation signals:</strong><br>${reputationSignals}</div>` : ''}
           ${safeSignals ? `<div style="margin-top:8px"><strong>Safe signals:</strong><br>${safeSignals}</div>` : ''}
           ${sources ? `<div class="source-list">${sources}</div>` : ''}
+        </div>
+      </div>
+    `);
+  }
+
+  // Audio
+  if (technical?.audio) {
+    const audio = technical.audio;
+    sections.push(`
+      <div class="tech-section">
+        <div class="tech-section-title">
+          ElevenLabs Speech-to-Text
+          <span class="tech-latency">${escapeHtml(audio.provider || '')}</span>
+        </div>
+        <div class="tech-content">
+          ${audio.error ? `<div class="error-inline">${escapeHtml(audio.error)}</div>` : ''}
+          ${audio.text ? `<pre class="extracted-text">${escapeHtml(audio.text)}</pre>` : ''}
         </div>
       </div>
     `);

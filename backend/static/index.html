@@ -288,6 +288,20 @@
             <button class="remove-image" onclick="removeImage()" aria-label="Remove image">✕</button>
           </div>
 
+          <!-- Audio preview -->
+          <div class="audio-preview" id="audioPreview" style="display:none">
+            <div class="audio-preview-content">
+              <svg class="preview-audio-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <span id="audioPreviewName">Selected audio file</span>
+            </div>
+            <button class="remove-audio" onclick="removeAudio()" aria-label="Remove audio">✕</button>
+          </div>
+
           <div class="composer">
             <div class="composer-inner">
               <textarea
@@ -307,6 +321,16 @@
                   <input type="file" id="imageUpload" accept="image/*" style="display:none" />
                 </label>
 
+                <label class="action-btn" for="audioUpload" title="Attach audio transcript (MP3/WAV/M4A/MP4)" aria-label="Upload audio">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                  <input type="file" id="audioUpload" accept="audio/*,video/*" style="display:none" />
+                </label>
+
                 <button class="send-btn" id="sendBtn" onclick="sendInvestigation()" aria-label="Investigate">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="22" y1="2" x2="11" y2="13"/>
@@ -317,7 +341,7 @@
             </div>
           </div>
 
-          <div class="input-hint">Attach an image or paste recruiter text. Hermes extracts evidence, launches agents, and shows the technical trail.</div>
+          <div class="input-hint">Attach an image, audio clip, or paste recruiter text. Hermes extracts evidence, launches agents, and shows the technical trail.</div>
         </div>
       </div>
 
