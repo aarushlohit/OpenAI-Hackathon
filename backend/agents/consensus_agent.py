@@ -14,7 +14,8 @@ You will receive:
 - Behavior analysis (LLM-based)
 - OSINT findings (LLM-based)
 - Domain intelligence (deterministic)
-- Optional: image analysis (vision AI)
+- Optional: structured image extraction (Pollinations vision/OCR)
+- Optional: OpenCode web reputation search across Glassdoor, AmbitionBox, Reddit, and scam reports
 
 Produce a final verdict. Return ONLY a JSON object:
 {
@@ -44,7 +45,8 @@ def run(
     behavior: dict,
     osint: dict,
     domain: dict,
-    image_analysis: str | None = None,
+    image_analysis: dict | str | None = None,
+    web_reputation: dict | None = None,
 ) -> dict:
     """
     Synthesize all agent outputs into a final verdict.
@@ -74,6 +76,8 @@ def run(
 
     if image_analysis:
         evidence["image_analysis"] = image_analysis
+    if web_reputation:
+        evidence["web_reputation"] = web_reputation
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

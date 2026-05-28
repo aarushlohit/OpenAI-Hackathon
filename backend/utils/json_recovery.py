@@ -7,11 +7,14 @@ import json
 import re
 
 
-def recover_json(text: str) -> dict | None:
+def recover_json(text: str | None) -> dict | None:
     """
     Try hard to extract a JSON object from messy LLM output.
     Returns parsed dict or None if all attempts fail.
     """
+    if not text:
+        return None
+
     # 1. Strip markdown code fences
     text = re.sub(r"```(?:json)?", "", text).strip()
 

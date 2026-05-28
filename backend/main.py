@@ -7,6 +7,7 @@ import json
 import asyncio
 import sys
 import os
+import re
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -26,7 +27,7 @@ import agents.behavior_agent as behavior_agent
 import agents.osint_agent as osint_agent
 import agents.domain_agent as domain_agent
 import agents.consensus_agent as consensus_agent
-from providers import pollinations_client
+from providers import opencode_client, pollinations_client
 
 app = FastAPI(title="Hermes-X", version="2.0.0")
 
@@ -58,61 +59,114 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-async def _run_investigation(text: str, image_bytes: bytes | None, mime_type: str) -> AsyncGenerator[str, None]:
+async def _run_investigation(
+    text: str,
+    image_bytes: bytes | None,
+    mime_type: str,
+    image_filename: str = "evidence.jpg",
+) -> AsyncGenerator[str, None]:
     """
     Core investigation pipeline — yields SSE events.
     All agents run in a thread pool to avoid blocking the event loop.
     """
     loop = asyncio.get_event_loop()
-
-    # Step 1: Behavior
-    yield _sse("progress", {"step": "behavior", "message": "Analyzing onboarding flow and communication patterns…"})
-    behavior_result = await loop.run_in_executor(None, behavior_agent.run, text)
-    yield _sse("agent_result", {"agent": "behavior", "result": behavior_result})
-
-    # Step 2: OSINT
-    yield _sse("progress", {"step": "osint", "message": "Verifying company legitimacy and recruiter claims…"})
-    osint_result = await loop.run_in_executor(None, osint_agent.run, text)
-    yield _sse("agent_result", {"agent": "osint", "result": osint_result})
-
-    # Step 3: Domain
-    yield _sse("progress", {"step": "domain", "message": "Checking domain trust and typo-squatting indicators…"})
-    domain_result = await loop.run_in_executor(None, domain_agent.run, text)
-    yield _sse("agent_result", {"agent": "domain", "result": domain_result})
-
-    # Step 4: Image (optional)
     image_analysis = None
+
+    # Step 1: Image OCR / extraction (optional). This runs first so image-only
+    # evidence can still feed text, domain, and company analysis.
     if image_bytes:
-        yield _sse("progress", {"step": "image", "message": "Analyzing attached image for fraud indicators…"})
+        yield _sse("progress", {"step": "image", "message": "Uploading image and extracting offer-letter text…"})
         try:
             image_analysis = await loop.run_in_executor(
                 None,
-                lambda: pollinations_client.analyze_image(
+                lambda: pollinations_client.extract_offer_letter(
                     image_bytes,
-                    "Analyze this image for signs of recruitment fraud, suspicious company logos, "
-                    "fake offer letters, suspicious payment instructions, or other scam indicators. "
-                    "Be specific about what you see.",
+                    image_filename,
                     mime_type,
                 ),
             )
-            yield _sse("agent_result", {"agent": "image", "result": {"analysis": image_analysis}})
+            yield _sse("agent_result", {"agent": "image", "result": image_analysis})
         except RuntimeError as e:
-            yield _sse("agent_result", {"agent": "image", "result": {"error": str(e)}})
+            image_analysis = {"error": str(e), "provider": pollinations_client.model_name()}
+            yield _sse("agent_result", {"agent": "image", "result": image_analysis})
 
-    # Step 5: Consensus
+    analysis_text = _merge_text_and_image_extraction(text, image_analysis)
+
+    # Step 2: Behavior
+    yield _sse("progress", {"step": "behavior", "message": "Analyzing onboarding flow and communication patterns…"})
+    behavior_result = await loop.run_in_executor(None, behavior_agent.run, analysis_text)
+    yield _sse("agent_result", {"agent": "behavior", "result": behavior_result})
+
+    # Step 3: OSINT
+    yield _sse("progress", {"step": "osint", "message": "Verifying company legitimacy and recruiter claims…"})
+    osint_result = await loop.run_in_executor(None, osint_agent.run, analysis_text)
+    yield _sse("agent_result", {"agent": "osint", "result": osint_result})
+
+    # Step 4: Domain
+    yield _sse("progress", {"step": "domain", "message": "Checking domain trust and typo-squatting indicators…"})
+    domain_result = await loop.run_in_executor(None, domain_agent.run, analysis_text)
+    yield _sse("agent_result", {"agent": "domain", "result": domain_result})
+
+    # Step 5: Web reputation. A registered company can still be tied to fake
+    # internships, deposit fraud, or impersonation, so search public reputation
+    # sources before final synthesis.
+    yield _sse("progress", {"step": "web", "message": "Searching Glassdoor, AmbitionBox, Reddit, and scam reports…"})
+    web_reputation_result = await loop.run_in_executor(
+        None,
+        lambda: opencode_client.search_company_reputation(
+            {
+                "operator_text": text,
+                "analysis_text": analysis_text,
+                "image_extraction": image_analysis,
+                "behavior": behavior_result,
+                "osint": osint_result,
+                "domain": domain_result,
+            }
+        ),
+    )
+    yield _sse("agent_result", {"agent": "web", "result": web_reputation_result})
+
+    # Step 6: Consensus
     yield _sse("progress", {"step": "consensus", "message": "Running consensus analysis and forming final verdict…"})
     consensus_result = await loop.run_in_executor(
         None,
-        lambda: consensus_agent.run(behavior_result, osint_result, domain_result, image_analysis),
+        lambda: consensus_agent.run(
+            behavior_result,
+            osint_result,
+            domain_result,
+            image_analysis,
+            web_reputation_result,
+        ),
     )
 
+    # Step 7: OpenCode final review
+    yield _sse("progress", {"step": "opencode", "message": "Parsing evidence through OpenCode DeepSeek review…"})
+    opencode_result = await loop.run_in_executor(
+        None,
+        lambda: opencode_client.assess_offer_letter(
+            {
+                "operator_text": text,
+                "analysis_text": analysis_text,
+                "image_extraction": image_analysis,
+                "behavior": behavior_result,
+                "osint": osint_result,
+                "domain": domain_result,
+                "web_reputation": web_reputation_result,
+                "consensus": consensus_result,
+            }
+        ),
+    )
+    yield _sse("agent_result", {"agent": "opencode", "result": opencode_result})
+
     yield _sse("verdict", {
-        "consensus": consensus_result,
+        "consensus": _merge_opencode_verdict(consensus_result, opencode_result, web_reputation_result),
         "technical": {
             "behavior": behavior_result,
             "osint": osint_result,
             "domain": domain_result,
-            "image": {"analysis": image_analysis} if image_analysis else None,
+            "image": image_analysis,
+            "web": web_reputation_result,
+            "opencode": opencode_result,
         },
     })
 
@@ -123,12 +177,13 @@ async def _run_investigation(text: str, image_bytes: bytes | None, mime_type: st
 async def investigate(
     text: str = Form(""),
     image: UploadFile | None = File(None),
+    image_path: str = Form(""),
 ):
     """
     Main investigation endpoint. Returns SSE stream.
     Accepts text and optional image upload.
     """
-    if not text.strip() and image is None:
+    if not text.strip() and image is None and not image_path.strip():
         return StreamingResponse(
             iter([_sse("error", {"message": "Please provide text or an image to investigate."})]),
             media_type="text/event-stream",
@@ -136,15 +191,111 @@ async def investigate(
 
     image_bytes = None
     mime_type = "image/jpeg"
+    image_filename = "evidence.jpg"
     if image is not None:
         image_bytes = await image.read()
         mime_type = image.content_type or "image/jpeg"
+        image_filename = image.filename or image_filename
+    elif image_path.strip():
+        try:
+            image_bytes, image_filename, mime_type = pollinations_client.load_image_from_path(image_path.strip())
+        except RuntimeError as e:
+            return StreamingResponse(
+                iter([_sse("error", {"message": str(e)})]),
+                media_type="text/event-stream",
+            )
 
     return StreamingResponse(
-        _run_investigation(text, image_bytes, mime_type),
+        _run_investigation(text, image_bytes, mime_type, image_filename),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _merge_text_and_image_extraction(text: str, image_analysis: dict | None) -> str:
+    parts = []
+    if text.strip():
+        parts.append(text.strip())
+    if image_analysis:
+        extracted_text = image_analysis.get("extracted_text")
+        offer_summary = image_analysis.get("offer_summary")
+        company_name = image_analysis.get("company_name")
+        scam_conclusion = image_analysis.get("scam_conclusion")
+        red_flags = image_analysis.get("red_flags") or []
+        safe_signals = image_analysis.get("safe_signals") or []
+
+        image_parts = []
+        if company_name:
+            image_parts.append(f"Company from image: {company_name}")
+        if extracted_text:
+            image_parts.append(f"Extracted offer-letter text:\n{extracted_text}")
+        if offer_summary:
+            image_parts.append(f"Offer summary: {offer_summary}")
+        if scam_conclusion:
+            image_parts.append(f"Pollinations image conclusion: {scam_conclusion}")
+        if red_flags:
+            image_parts.append(f"Image red flags: {json.dumps(red_flags, ensure_ascii=False)}")
+        if safe_signals:
+            image_parts.append(f"Image safe signals: {json.dumps(safe_signals, ensure_ascii=False)}")
+        if image_parts:
+            parts.append("\n".join(image_parts))
+
+    return "\n\n".join(parts) or "(image-only evidence; extraction unavailable)"
+
+
+def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dict | None = None) -> dict:
+    merged = dict(consensus)
+
+    web_conclusion = str((web_reputation or {}).get("conclusion", "")).upper()
+    if web_conclusion == "SCAM":
+        merged["verdict"] = "CRITICAL" if merged.get("verdict") in {"HIGH RISK", "CRITICAL"} else "HIGH RISK"
+        web_signals = (web_reputation or {}).get("scam_signals") or []
+        if web_signals:
+            existing = merged.get("why_flagged") or []
+            merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in web_signals]]))[:6]
+        if (web_reputation or {}).get("summary"):
+            merged["reasoning"] = (
+                f"{merged.get('reasoning', '')} Web reputation review: {web_reputation['summary']}"
+            ).strip()
+
+    if not opencode or opencode.get("error"):
+        return merged
+
+    conclusion = str(opencode.get("conclusion", "")).upper()
+    if not conclusion:
+        return merged
+
+    if conclusion == "SCAM":
+        merged["verdict"] = "CRITICAL" if consensus.get("verdict") in {"HIGH RISK", "CRITICAL"} else "HIGH RISK"
+    elif conclusion == "NOT SCAM" and consensus.get("verdict") in {"SAFE", "LOW RISK", "MEDIUM RISK"}:
+        merged["verdict"] = "SAFE"
+
+    confidence = opencode.get("confidence")
+    if isinstance(confidence, (int, float)):
+        normalized_confidence = confidence * 100 if 0 <= confidence <= 1 else confidence
+        merged["confidence"] = max(0, min(100, int(normalized_confidence)))
+
+    summary = opencode.get("summary")
+    if summary:
+        merged["headline"] = _first_sentence(str(summary)) or merged.get("headline", "")
+        merged["reasoning"] = f"{merged.get('reasoning', '')} OpenCode review: {summary}".strip()
+
+    evidence = opencode.get("key_evidence")
+    if isinstance(evidence, list) and evidence:
+        existing = merged.get("why_flagged") or []
+        merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in evidence]]))[:6]
+
+    action = opencode.get("recommended_action")
+    if action:
+        merged["recommendation"] = str(action)
+
+    merged["opencode_provider"] = opencode.get("provider")
+    return merged
+
+
+def _first_sentence(text: str) -> str:
+    match = re.match(r"(.+?[.!?])(?:\s|$)", text.strip())
+    return match.group(1) if match else text.strip()[:160]

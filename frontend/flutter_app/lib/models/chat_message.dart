@@ -2,7 +2,6 @@
 library;
 
 import 'dart:typed_data';
-import '../../models/investigation_event.dart';
 
 enum MessageRole { user, hermes }
 

@@ -156,7 +156,7 @@
             <div class="composer-inner">
               <textarea
                 id="messageInput"
-                placeholder="Paste recruiter message, offer letter, suspicious URL, or onboarding instructions…"
+                placeholder="Paste recruiter message, offer letter text, suspicious URL, or add an image/path…"
                 rows="1"
                 aria-label="Investigation input"
               ></textarea>
@@ -188,9 +188,17 @@
                 </button>
               </div>
             </div>
+            <div class="path-row">
+              <input
+                id="imagePathInput"
+                type="text"
+                placeholder="Optional server image path, e.g. /home/aarush/offer-letter.png"
+                aria-label="Server image path"
+              />
+            </div>
           </div>
 
-          <div class="input-hint">Hermes-X analyzes recruitment messages, domains, and images for fraud. Press Enter to investigate.</div>
+          <div class="input-hint">Attach an image or provide a server path. Hermes-X extracts offer-letter text, sends it to OpenCode, and returns a scam conclusion.</div>
         </div>
       </div>
 
