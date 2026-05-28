@@ -34,42 +34,62 @@ def search_company_reputation(evidence: dict[str, Any]) -> dict[str, Any]:
     """
     Use OpenCode web search to validate the company/internship beyond registration status.
 
-    This intentionally asks for Glassdoor, AmbitionBox, Reddit, and scam-report searches
-    because a registered company can still run fake internships, deposit schemes, or
-    impersonated onboarding.
+    A registered company can still run fake internships, deposit schemes, or impersonated
+    onboarding. We search Glassdoor, AmbitionBox, Reddit, Quora, and generic scam-report
+    queries and pass the actual page snippets to the LLM so it has real grounding.
     """
     search_results = _search_public_reputation(evidence)
     enriched_evidence = {**evidence, "public_search_results": search_results}
 
-    prompt = f"""You are an OSINT investigator for internship and recruitment scams.
+    # Build a concise snippet summary to inject into the prompt
+    snippet_summary = _summarize_search_snippets(search_results)
 
-Use the provided public-search snippets. Do NOT stop at "company is registered" or "company exists".
-A real registered company can still be linked to scam internships, fake recruiters, deposit fraud,
-unpaid internship complaints, impersonation, or bait-and-switch onboarding.
+    prompt = f"""You are a senior OSINT investigator specialising in internship and recruitment scams.
 
-Compare evidence from Glassdoor, AmbitionBox, Reddit, scam-report searches, and the document/domain evidence.
+--- CRITICAL RULES ---
+1. "Company is registered" or "company has a website" is NOT sufficient evidence of legitimacy.
+   Scammers routinely use real registered companies as fronts for fake internships.
+2. A company that appears on Glassdoor or AmbitionBox with mostly positive reviews can STILL be
+   running a separate scam internship campaign. Look for recent complaints specifically about
+   internships, offer letters, UPI payments, or Telegram onboarding.
+3. If the public search snippets show ANY credible complaint about the company asking for deposits,
+   UPI, or certificate-based scam internships, escalate to SCAM or at minimum UNCERTAIN.
+4. Absence of results ("not_found") on Reddit or scam-report sites is weak evidence of legitimacy;
+   do NOT treat it as a strong safe signal.
+
+--- REAL-WORLD WEB SEARCH SNIPPETS ---
+{snippet_summary}
+
+--- INSTRUCTIONS ---
+Synthesize all evidence (web snippets + document/domain/behavioral evidence below).
+Pay special attention to:
+ - Reddit posts, Quora answers, or review-site entries mentioning scam, fraud, deposit, UPI,
+   certificate, offer letter, or Telegram for THIS company.
+ - Whether the onboarding described matches how legitimate companies in this sector actually hire.
+ - Domain mismatches, informal email addresses, missing official contact details.
 
 Return ONLY valid JSON:
 {{
   "search_performed": true,
   "conclusion": "SCAM | NOT SCAM | UNCERTAIN",
-  "confidence": 0,
+  "confidence": <integer 0-100>,
   "company": "company name or Unknown",
-  "registered_but_suspicious": false,
+  "registered_but_suspicious": <true|false>,
   "sources_checked": [
-    {{"source": "Glassdoor", "status": "found | not_found | blocked | conflicting", "finding": "...", "url_or_query": "..."}},
-    {{"source": "AmbitionBox", "status": "found | not_found | blocked | conflicting", "finding": "...", "url_or_query": "..."}},
-    {{"source": "Reddit", "status": "found | not_found | blocked | conflicting", "finding": "...", "url_or_query": "..."}},
-    {{"source": "Scam reports/web", "status": "found | not_found | blocked | conflicting", "finding": "...", "url_or_query": "..."}}
+    {{"source": "Glassdoor", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
+    {{"source": "AmbitionBox", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
+    {{"source": "Reddit", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
+    {{"source": "Quora", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}},
+    {{"source": "Scam reports/web", "status": "found | not_found | blocked | conflicting", "finding": "<what was found or not found>", "url_or_query": "<query used>"}}
   ],
-  "reputation_signals": ["specific public reputation signal"],
-  "scam_signals": ["specific scam signal from public web or evidence"],
+  "reputation_signals": ["specific public reputation signal found in web snippets"],
+  "scam_signals": ["specific scam signal found in web snippets or evidence — be explicit"],
   "safe_signals": ["specific legitimacy signal"],
-  "summary": "2-4 sentence web-search conclusion",
-  "recommended_action": "what the user should do next"
+  "summary": "3-5 sentence web-search conclusion — cite specific snippets or absence of results",
+  "recommended_action": "clear 1-2 sentence advice for the user"
 }}
 
-Evidence to investigate:
+Full evidence bundle:
 {json.dumps(enriched_evidence, ensure_ascii=False, indent=2)}
 """
     result = _run_opencode_prompt(prompt)
@@ -201,10 +221,11 @@ def _search_public_reputation(evidence: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
     queries = [
-        ("Glassdoor", f'site:glassdoor.com OR site:glassdoor.co.in "{company}" internship reviews'),
-        ("AmbitionBox", f'site:ambitionbox.com "{company}" internship reviews'),
-        ("Reddit", f'site:reddit.com "{company}" internship scam OR fraud OR offer letter'),
-        ("Scam reports/web", f'"{company}" internship scam fraud offer letter UPI deposit'),
+        ("Glassdoor", f'"{company}" internship site:glassdoor.com OR site:glassdoor.co.in'),
+        ("AmbitionBox", f'"{company}" internship site:ambitionbox.com reviews'),
+        ("Reddit", f'"{company}" internship scam OR fraud OR "offer letter" site:reddit.com'),
+        ("Quora", f'"{company}" internship scam OR legit OR fake site:quora.com'),
+        ("Scam reports/web", f'"{company}" internship scam fraud UPI deposit "offer letter" certificate -site:linkedin.com'),
     ]
     results: list[dict[str, Any]] = []
     for source, query in queries:
@@ -223,16 +244,26 @@ def _duckduckgo_search(source: str, query: str) -> dict[str, Any]:
             "status": "blocked",
             "query": query,
             "finding": f"Search request failed: {exc}",
+            "snippet": "",
             "results": [],
         }
 
+    raw_text = response.text
+
+    # Extract up to 3 result links
     results = []
-    for title, link in re.findall(r"## \[(.*?)\]\((.*?)\)", response.text):
+    for title, link in re.findall(r"## \[(.*?)\]\((.*?)\)", raw_text):
         clean_link = _clean_duckduckgo_link(link)
         if clean_link and "duckduckgo.com" not in clean_link:
             results.append({"title": title.strip(), "url": clean_link})
-        if len(results) >= 3:
+        if len(results) >= 4:
             break
+
+    # Extract a meaningful text snippet (first 1200 chars of rendered body)
+    body_text = re.sub(r"\[.*?\]\(.*?\)", "", raw_text)  # remove markdown links
+    body_text = re.sub(r"[#>*_`|]+", " ", body_text)      # strip markdown symbols
+    body_text = re.sub(r"\s{2,}", " ", body_text).strip()
+    snippet = body_text[:1200] if body_text else ""
 
     status = "found" if results else "not_found"
     finding = (
@@ -245,6 +276,7 @@ def _duckduckgo_search(source: str, query: str) -> dict[str, Any]:
         "status": status,
         "query": query,
         "finding": finding,
+        "snippet": snippet,
         "results": results,
     }
 
@@ -254,6 +286,27 @@ def _clean_duckduckgo_link(link: str) -> str:
     qs = urllib.parse.parse_qs(parsed.query)
     target = qs.get("uddg", [link])[0]
     return urllib.parse.unquote(target)
+
+
+def _summarize_search_snippets(search_results: list[dict[str, Any]]) -> str:
+    """Build a concise text block of search snippets to inject into the LLM prompt."""
+    if not search_results:
+        return "No public search results were retrieved."
+    parts = []
+    for item in search_results:
+        source = item.get("source", "Unknown")
+        status = item.get("status", "unknown")
+        query = item.get("query", "")
+        snippet = (item.get("snippet") or "").strip()[:600]
+        links = item.get("results", [])
+        link_titles = "; ".join(r.get("title", "") for r in links[:3])
+        block = f"[{source}] status={status} | query: {query}"
+        if link_titles:
+            block += f"\n  Top results: {link_titles}"
+        if snippet:
+            block += f"\n  Snippet: {snippet}"
+        parts.append(block)
+    return "\n\n".join(parts)
 
 
 def _has_positive_payment_signal(text: str, term: str) -> bool:

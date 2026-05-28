@@ -352,18 +352,53 @@ def _merge_text_and_image_extraction(text: str, image_analysis: dict | None) -> 
 def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dict | None = None) -> dict:
     merged = dict(consensus)
 
-    web_conclusion = str((web_reputation or {}).get("conclusion", "")).upper()
-    if web_conclusion == "SCAM":
-        merged["verdict"] = "CRITICAL" if merged.get("verdict") in {"HIGH RISK", "CRITICAL"} else "HIGH RISK"
-        web_signals = (web_reputation or {}).get("scam_signals") or []
-        if web_signals:
-            existing = merged.get("why_flagged") or []
-            merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in web_signals]]))[:6]
-        if (web_reputation or {}).get("summary"):
-            merged["reasoning"] = (
-                f"{merged.get('reasoning', '')} Web reputation review: {web_reputation['summary']}"
-            ).strip()
+    # --- Web reputation escalation ---
+    if web_reputation:
+        web_conclusion = str(web_reputation.get("conclusion", "")).upper()
+        registered_but_suspicious = web_reputation.get("registered_but_suspicious", False)
+        web_signals = [str(s) for s in (web_reputation.get("scam_signals") or [])]
+        web_summary = web_reputation.get("summary", "")
 
+        if web_conclusion == "SCAM":
+            # Escalate: if already HIGH RISK or CRITICAL, push to CRITICAL
+            if merged.get("verdict") in {"HIGH RISK", "CRITICAL"}:
+                merged["verdict"] = "CRITICAL"
+            else:
+                merged["verdict"] = "HIGH RISK"
+            if web_signals:
+                existing = merged.get("why_flagged") or []
+                merged["why_flagged"] = list(dict.fromkeys([*existing, *web_signals]))[:8]
+            if web_summary:
+                merged["reasoning"] = (
+                    f"{merged.get('reasoning', '')} Web reputation: {web_summary}"
+                ).strip()
+
+        elif web_conclusion == "UNCERTAIN" and web_signals:
+            # Uncertain + has scam signals = at least MEDIUM RISK
+            current = merged.get("verdict", "")
+            if current in {"SAFE", "LOW RISK"}:
+                merged["verdict"] = "MEDIUM RISK"
+                merged["confidence"] = min(merged.get("confidence", 50), 60)
+            existing = merged.get("why_flagged") or []
+            merged["why_flagged"] = list(dict.fromkeys([*existing, *web_signals]))[:8]
+            if web_summary:
+                merged["reasoning"] = (
+                    f"{merged.get('reasoning', '')} Web uncertainty: {web_summary}"
+                ).strip()
+
+        if registered_but_suspicious:
+            # Company is real but web/OSINT shows suspicious internship activity
+            current = merged.get("verdict", "")
+            if current in {"SAFE", "LOW RISK"}:
+                merged["verdict"] = "MEDIUM RISK"
+            elif current == "MEDIUM RISK":
+                merged["verdict"] = "HIGH RISK"
+            reg_flag = "Company appears registered but web searches flag suspicious internship activity"
+            existing = merged.get("why_flagged") or []
+            if reg_flag not in existing:
+                merged["why_flagged"] = [reg_flag, *existing][:8]
+
+    # --- OpenCode final review override ---
     if not opencode or opencode.get("error"):
         return merged
 
@@ -372,9 +407,15 @@ def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dic
         return merged
 
     if conclusion == "SCAM":
-        merged["verdict"] = "CRITICAL" if consensus.get("verdict") in {"HIGH RISK", "CRITICAL"} else "HIGH RISK"
+        if consensus.get("verdict") in {"HIGH RISK", "CRITICAL"}:
+            merged["verdict"] = "CRITICAL"
+        else:
+            merged["verdict"] = "HIGH RISK"
     elif conclusion == "NOT SCAM" and consensus.get("verdict") in {"SAFE", "LOW RISK", "MEDIUM RISK"}:
-        merged["verdict"] = "SAFE"
+        # Only clear to SAFE if web reputation also agrees (no scam signals)
+        web_rep_clean = not (web_reputation or {}).get("scam_signals")
+        if web_rep_clean and not (web_reputation or {}).get("registered_but_suspicious"):
+            merged["verdict"] = "SAFE"
 
     confidence = opencode.get("confidence")
     if isinstance(confidence, (int, float)):
@@ -389,7 +430,7 @@ def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dic
     evidence = opencode.get("key_evidence")
     if isinstance(evidence, list) and evidence:
         existing = merged.get("why_flagged") or []
-        merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in evidence]]))[:6]
+        merged["why_flagged"] = list(dict.fromkeys([*existing, *[str(item) for item in evidence]]))[:8]
 
     action = opencode.get("recommended_action")
     if action:
@@ -397,6 +438,7 @@ def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dic
 
     merged["opencode_provider"] = opencode.get("provider")
     return merged
+
 
 
 def _first_sentence(text: str) -> str:

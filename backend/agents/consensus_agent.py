@@ -12,33 +12,42 @@ SYSTEM_PROMPT = """You are a senior recruitment fraud analyst synthesizing evide
 
 You will receive:
 - Behavior analysis (LLM-based)
-- OSINT findings (LLM-based)
+- OSINT findings (LLM-based — includes company legitimacy assessment and internship-specific flags)
 - Domain intelligence (deterministic)
 - Optional: structured image extraction (Pollinations vision/OCR)
-- Optional: OpenCode web reputation search across Glassdoor, AmbitionBox, Reddit, and scam reports
+- Optional: Web reputation search across Glassdoor, AmbitionBox, Reddit, Quora, and scam reports
+  (includes REAL web snippets from actual searches — treat these as ground truth)
+
+CRITICAL RULES FOR ACCURACY:
+1. "Company is registered" is NOT a safe signal. Scammers routinely misuse real registered companies.
+2. If web_reputation.registered_but_suspicious = true, treat this as a HIGH RISK escalation.
+3. If ANY web source (Reddit, Quora, scam-report) shows a complaint about THIS company's internship
+   asking for UPI, deposit, or certificate-based schemes, escalate to HIGH RISK or CRITICAL.
+4. If behavior_analysis shows payment/deposit/Telegram signals AND web searches show no legitimate
+   hiring evidence, escalate to CRITICAL.
+5. Never give SAFE or LOW RISK if:
+   - Deposits or UPI payments are mentioned
+   - Telegram-only onboarding is the only contact method
+   - OSINT flags company_legitimacy as REAL_BUT_SUSPICIOUS or IMPERSONATION
+   - Web reputation conclusion is SCAM or registered_but_suspicious is true
 
 Produce a final verdict. Return ONLY a JSON object:
 {
   "verdict": "<one of: SAFE | LOW RISK | MEDIUM RISK | HIGH RISK | CRITICAL>",
   "confidence": <integer 0-100>,
   "headline": "<one sentence headline for this case>",
-  "why_flagged": ["specific reason 1", "specific reason 2"],
+  "why_flagged": ["specific reason 1 — cite which agent found it", "specific reason 2"],
   "safe_signals": ["reassuring signal 1"],
   "recommendation": "<clear 1-2 sentence actionable advice>",
-  "reasoning": "<2-3 sentence explanation of the synthesis>"
+  "reasoning": "<3-4 sentence explanation of the synthesis — reference actual evidence>"
 }
 
-CRITICAL RULE: Be calibrated. Do NOT aggressively assume scams.
-- Standard corporate hiring processes with official email domains = SAFE
-- Payment requests + suspicious domains + Telegram-only = CRITICAL
-- Weigh ALL evidence — both flags AND safe signals.
-
 Scoring guide:
-- SAFE: No red flags, official channels, standard process
-- LOW RISK: Minor concerns but mostly legitimate indicators
-- MEDIUM RISK: Mixed signals, exercise caution
-- HIGH RISK: Multiple fraud indicators present
-- CRITICAL: Clear and present scam — do not engage"""
+- SAFE: No red flags, official channels, standard multi-round process, confirmed employer reputation
+- LOW RISK: Minor concerns but mostly legitimate indicators, verify via official company page
+- MEDIUM RISK: Mixed signals, one or two suspicious patterns, exercise caution
+- HIGH RISK: Multiple fraud indicators OR web complaints about this company's internships
+- CRITICAL: Clear and present scam — payment/deposit/Telegram + no legitimate hiring evidence"""
 
 
 def run(
@@ -62,8 +71,11 @@ def run(
             "reasoning": behavior.get("reasoning", ""),
         },
         "osint_findings": {
+            "company_name": osint.get("company_name", "Unknown"),
             "company_legitimacy": osint.get("company_legitimacy", ""),
             "onboarding_assessment": osint.get("onboarding_assessment", ""),
+            "recruiter_credibility": osint.get("recruiter_credibility", ""),
+            "internship_flags": osint.get("internship_flags", []),
             "key_findings": osint.get("key_findings", []),
             "risk_score": osint.get("risk_score", 0),
         },
