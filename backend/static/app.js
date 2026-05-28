@@ -337,6 +337,9 @@ function renderHermesProgress() {
     </div>
     <div class="hermes-content">
       <div class="progress-steps" id="progressSteps">
+        ${renderStep('thinking', 'Thinking…', 'wait')}
+        ${renderStep('pondering', 'Pondering evidence…', 'wait')}
+        ${renderStep('agents', 'Launching agents…', 'wait')}
         ${renderStep('behavior', 'Analyzing onboarding flow…', 'wait')}
         ${renderStep('osint', 'Verifying company legitimacy…', 'wait')}
         ${renderStep('domain', 'Checking domain trust…', 'wait')}
@@ -365,6 +368,9 @@ function renderStep(id, label, state) {
 }
 
 const STEP_LABELS = {
+  thinking: 'Thinking…',
+  pondering: 'Pondering evidence boundaries…',
+  agents: 'Launching agents…',
   behavior: 'Analyzing onboarding flow and communication patterns…',
   osint: 'Verifying company legitimacy and recruiter claims…',
   domain: 'Checking domain trust and typo-squatting indicators…',
@@ -633,7 +639,7 @@ function buildTechPanel(technical, consensus) {
           ${o.summary ? `<div style="margin-top:8px;color:var(--text-muted)">${escapeHtml(o.summary)}</div>` : ''}
           ${evidence ? `<div style="margin-top:8px">${evidence}</div>` : ''}
           ${o.recommended_action ? `<div class="verdict-recommendation rec-${verdictTier(o.conclusion === 'SCAM' ? 'HIGH RISK' : 'LOW RISK')}" style="margin-top:8px">${escapeHtml(o.recommended_action)}</div>` : ''}
-          ${o.command ? `<div style="margin-top:8px;color:var(--text-muted)">${escapeHtml(o.command)}</div>` : ''}
+          ${o.api_url ? `<div style="margin-top:8px;color:var(--text-muted)">${escapeHtml(o.api_url)}</div>` : ''}
         </div>
       </div>
     `);

@@ -114,20 +114,17 @@ def run(
         parsed["latency_ms"] = int((time.time() - start) * 1000)
         return parsed
     except RuntimeError as e:
-        avg_score = (
-            behavior.get("risk_score", 0)
-            + osint.get("risk_score", 0)
-            + domain.get("risk_score", 5)
-        ) // 3
-        verdict = _score_to_verdict(avg_score)
+        score = _fallback_score(behavior, osint, domain, image_analysis, web_reputation)
+        verdict = _score_to_verdict(score)
+        why_flagged = _collect_fallback_flags(behavior, domain, image_analysis, web_reputation)
         return {
             "verdict": verdict,
-            "confidence": 40,
+            "confidence": 68 if score >= 55 else 45,
             "headline": f"Analysis complete — {verdict} (degraded mode)",
-            "why_flagged": behavior.get("signals", [])[:3],
+            "why_flagged": why_flagged[:6],
             "safe_signals": behavior.get("safe_indicators", [])[:2],
-            "recommendation": "Consensus agent encountered an error. Review individual agent findings.",
-            "reasoning": f"Consensus agent failed: {e}",
+            "recommendation": "Treat this as unresolved risk until the flagged evidence is verified through official company channels. Do not pay fees or continue Telegram-only onboarding.",
+            "reasoning": f"Primary consensus model failed: {e}. Degraded verdict was computed from behavior, domain, image, and web reputation scores instead of defaulting to SAFE.",
             "provider": nvidia_model(),
             "latency_ms": int((time.time() - start) * 1000),
             "error": str(e),
@@ -144,3 +141,47 @@ def _score_to_verdict(score: int) -> str:
     if score < 75:
         return "HIGH RISK"
     return "CRITICAL"
+
+
+def _fallback_score(
+    behavior: dict,
+    osint: dict,
+    domain: dict,
+    image_analysis: dict | str | None,
+    web_reputation: dict | None,
+) -> int:
+    scores = [
+        int(behavior.get("risk_score", 0) or 0),
+        int(osint.get("risk_score", 0) or 0),
+        int(domain.get("risk_score", 5) or 5),
+    ]
+    if isinstance(image_analysis, dict):
+        scores.append(int(image_analysis.get("risk_score", 0) or 0))
+        if str(image_analysis.get("scam_conclusion", "")).upper() == "SCAM":
+            scores.append(90)
+    if web_reputation:
+        if str(web_reputation.get("conclusion", "")).upper() == "SCAM":
+            scores.append(90)
+        confidence = web_reputation.get("confidence")
+        if isinstance(confidence, (int, float)):
+            scores.append(int(confidence * 100 if 0 <= confidence <= 1 else confidence))
+    return max(scores)
+
+
+def _collect_fallback_flags(
+    behavior: dict,
+    domain: dict,
+    image_analysis: dict | str | None,
+    web_reputation: dict | None,
+) -> list[str]:
+    flags = [str(item) for item in behavior.get("signals", [])]
+    flags.extend(str(item) for item in domain.get("all_signals", []))
+    if isinstance(image_analysis, dict):
+        flags.extend(str(item) for item in image_analysis.get("red_flags", []))
+        if image_analysis.get("error"):
+            flags.append(f"Image extraction degraded: {image_analysis['error']}")
+    if web_reputation:
+        flags.extend(str(item) for item in web_reputation.get("scam_signals", []))
+        if web_reputation.get("error"):
+            flags.append(f"Web reputation degraded: {web_reputation['error']}")
+    return list(dict.fromkeys(flags))

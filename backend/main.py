@@ -8,8 +8,9 @@ import asyncio
 import sys
 import os
 import re
+import time
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -17,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Load env from this directory
+# Load env from repo root and backend directory. Secrets stay outside source.
+load_dotenv(Path(__file__).parents[1] / ".env")
 load_dotenv(Path(__file__).parent / ".env")
 
 # Ensure agents/providers/utils are importable
@@ -27,9 +29,9 @@ import agents.behavior_agent as behavior_agent
 import agents.osint_agent as osint_agent
 import agents.domain_agent as domain_agent
 import agents.consensus_agent as consensus_agent
-from providers import opencode_client, pollinations_client
+from providers import mongo_client, opencode_client, pollinations_client
 
-app = FastAPI(title="Hermes-X", version="2.0.0")
+app = FastAPI(title="Detective Hermes Agent", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,19 +41,43 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+REACT_DIST_DIR = Path(__file__).parents[1] / "frontend" / "react_app" / "dist"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+if (REACT_DIST_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(REACT_DIST_DIR / "assets")), name="react-assets")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """Serve the main SPA."""
-    html_path = STATIC_DIR / "index.html"
+    html_path = REACT_DIST_DIR / "index.html" if (REACT_DIST_DIR / "index.html").exists() else STATIC_DIR / "index.html"
     return HTMLResponse(content=html_path.read_text(), status_code=200)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "hermes-x", "version": "2.0.0"}
+    return {
+        "status": "ok",
+        "service": "detective-hermes-agent",
+        "version": "2.0.0",
+        "mongodb": mongo_client.enabled(),
+        "opencode_api": bool(os.getenv("OPENCODE_API_KEY") or os.getenv("OPENROUTER_API_KEY")),
+    }
+
+
+@app.get("/api/history")
+async def history():
+    return {"items": mongo_client.list_investigations()}
+
+
+@app.get("/api/reports")
+async def reports():
+    return {"items": mongo_client.list_reports()}
+
+
+@app.post("/api/reports")
+async def save_report(record: dict[str, Any]):
+    return mongo_client.save_report(record)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -71,10 +97,16 @@ async def _run_investigation(
     """
     loop = asyncio.get_event_loop()
     image_analysis = None
+    investigation_id = f"case-{int(time.time() * 1000)}"
+
+    yield _sse("progress", {"step": "thinking", "message": "Thinking…"})
+    yield _sse("progress", {"step": "pondering", "message": "Pondering evidence boundaries…"})
+    yield _sse("progress", {"step": "agents", "message": "Launching agents…"})
 
     # Step 1: Image OCR / extraction (optional). This runs first so image-only
     # evidence can still feed text, domain, and company analysis.
     if image_bytes:
+        yield _sse("progress", {"step": "image", "message": "Launching Agent<ImageForensics>…"})
         yield _sse("progress", {"step": "image", "message": "Uploading image and extracting offer-letter text…"})
         try:
             image_analysis = await loop.run_in_executor(
@@ -93,16 +125,19 @@ async def _run_investigation(
     analysis_text = _merge_text_and_image_extraction(text, image_analysis)
 
     # Step 2: Behavior
+    yield _sse("progress", {"step": "behavior", "message": "Launching Agent<Behavior>…"})
     yield _sse("progress", {"step": "behavior", "message": "Analyzing onboarding flow and communication patterns…"})
     behavior_result = await loop.run_in_executor(None, behavior_agent.run, analysis_text)
     yield _sse("agent_result", {"agent": "behavior", "result": behavior_result})
 
     # Step 3: OSINT
+    yield _sse("progress", {"step": "osint", "message": "Launching Agent<OSINT>…"})
     yield _sse("progress", {"step": "osint", "message": "Verifying company legitimacy and recruiter claims…"})
     osint_result = await loop.run_in_executor(None, osint_agent.run, analysis_text)
     yield _sse("agent_result", {"agent": "osint", "result": osint_result})
 
     # Step 4: Domain
+    yield _sse("progress", {"step": "domain", "message": "Launching Agent<DomainIntel>…"})
     yield _sse("progress", {"step": "domain", "message": "Checking domain trust and typo-squatting indicators…"})
     domain_result = await loop.run_in_executor(None, domain_agent.run, analysis_text)
     yield _sse("agent_result", {"agent": "domain", "result": domain_result})
@@ -110,6 +145,7 @@ async def _run_investigation(
     # Step 5: Web reputation. A registered company can still be tied to fake
     # internships, deposit fraud, or impersonation, so search public reputation
     # sources before final synthesis.
+    yield _sse("progress", {"step": "web", "message": "Launching Agent<WebReputation>…"})
     yield _sse("progress", {"step": "web", "message": "Searching Glassdoor, AmbitionBox, Reddit, and scam reports…"})
     web_reputation_result = await loop.run_in_executor(
         None,
@@ -127,6 +163,7 @@ async def _run_investigation(
     yield _sse("agent_result", {"agent": "web", "result": web_reputation_result})
 
     # Step 6: Consensus
+    yield _sse("progress", {"step": "consensus", "message": "Launching Agent<RiskSynthesis>…"})
     yield _sse("progress", {"step": "consensus", "message": "Running consensus analysis and forming final verdict…"})
     consensus_result = await loop.run_in_executor(
         None,
@@ -140,6 +177,7 @@ async def _run_investigation(
     )
 
     # Step 7: OpenCode final review
+    yield _sse("progress", {"step": "opencode", "message": "Launching Agent<OpenCodeDeepSeek>…"})
     yield _sse("progress", {"step": "opencode", "message": "Parsing evidence through OpenCode DeepSeek review…"})
     opencode_result = await loop.run_in_executor(
         None,
@@ -158,8 +196,22 @@ async def _run_investigation(
     )
     yield _sse("agent_result", {"agent": "opencode", "result": opencode_result})
 
+    final_consensus = _merge_opencode_verdict(consensus_result, opencode_result, web_reputation_result)
+    technical = {
+        "behavior": behavior_result,
+        "osint": osint_result,
+        "domain": domain_result,
+        "image": image_analysis,
+        "web": web_reputation_result,
+        "opencode": opencode_result,
+    }
+    record = _build_investigation_record(investigation_id, text, final_consensus, technical)
+    storage = await loop.run_in_executor(None, lambda: mongo_client.save_investigation(record))
+
     yield _sse("verdict", {
-        "consensus": _merge_opencode_verdict(consensus_result, opencode_result, web_reputation_result),
+        "id": investigation_id,
+        "storage": storage,
+        "consensus": final_consensus,
         "technical": {
             "behavior": behavior_result,
             "osint": osint_result,
@@ -299,3 +351,33 @@ def _merge_opencode_verdict(consensus: dict, opencode: dict, web_reputation: dic
 def _first_sentence(text: str) -> str:
     match = re.match(r"(.+?[.!?])(?:\s|$)", text.strip())
     return match.group(1) if match else text.strip()[:160]
+
+
+def _build_investigation_record(
+    investigation_id: str,
+    text: str,
+    consensus: dict[str, Any],
+    technical: dict[str, Any],
+) -> dict[str, Any]:
+    company = (
+        (technical.get("image") or {}).get("company_name")
+        or (technical.get("web") or {}).get("company")
+        or (technical.get("opencode") or {}).get("company")
+        or "Unknown company"
+    )
+    return {
+        "id": investigation_id,
+        "created_at": datetime_like_iso(),
+        "title": consensus.get("headline") or consensus.get("verdict") or "Investigation",
+        "company": company,
+        "verdict": consensus.get("verdict", "UNKNOWN"),
+        "confidence": consensus.get("confidence", 0),
+        "recommendation": consensus.get("recommendation", ""),
+        "summary": consensus.get("reasoning", ""),
+        "input_preview": text[:500],
+        "technical": technical,
+    }
+
+
+def datetime_like_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

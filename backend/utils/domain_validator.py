@@ -84,19 +84,13 @@ def analyze_domain(domain: str) -> dict:
             # Exact match on registered domain — likely legit
             result["signals"].append(f"Domain matches known legitimate company: {best_match}")
             result["score_delta"] -= 20
-        elif best_score >= 75 and registered != best_match:
+        elif best_score >= 85 and registered != best_match:
             # Close but not exact — typo squat
             result["signals"].append(
                 f"Possible typo-squat of '{best_match}' (similarity {best_score:.0f}%) — CRITICAL fraud indicator"
             )
             result["score_delta"] += 50
             result["risk_level"] = "critical"
-        elif best_score >= 60:
-            result["signals"].append(
-                f"Loosely resembles '{best_match}' (similarity {best_score:.0f}%) — suspicious"
-            )
-            result["score_delta"] += 20
-            result["risk_level"] = "high"
 
     # 4. Leetspeak / character substitution (0->o, 3->e, 1->i, etc.)
     leet_normalized = (

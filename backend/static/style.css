@@ -55,6 +55,7 @@ html, body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
 /* ── APP SHELL ──────────────────────────────────────────── */
@@ -213,6 +214,7 @@ html, body {
   min-width: 0;
   position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* ── WELCOME VIEW ───────────────────────────────────────── */
@@ -314,8 +316,9 @@ html, body {
 /* ── CONVERSATION VIEW ──────────────────────────────────── */
 .conversation-view {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 24px 20px 180px;
+  padding: 24px 20px 300px;
   scroll-behavior: smooth;
 }
 
@@ -740,7 +743,7 @@ html, body {
 
 /* ── INPUT AREA ─────────────────────────────────────────── */
 .input-area {
-  position: absolute;
+  position: sticky;
   bottom: 0;
   left: 0;
   right: 0;

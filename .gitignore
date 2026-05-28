@@ -8,6 +8,8 @@ venv/
 app/.env
 dist/
 build/
+node_modules/
 *.egg-info/
 
 .opencode
+.vercel

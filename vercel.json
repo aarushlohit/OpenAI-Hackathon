@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd frontend/react_app && npm install && npm run build",
+  "outputDirectory": "frontend/react_app/dist",
+  "rewrites": [
+    { "source": "/investigate", "destination": "/api/index.py" },
+    { "source": "/health", "destination": "/api/index.py" },
+    { "source": "/api/history", "destination": "/api/index.py" },
+    { "source": "/api/reports", "destination": "/api/index.py" }
+  ]
+}

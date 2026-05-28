@@ -1,5 +1,5 @@
-name: hermes_x
-description: Hermes-X — Recruitment Scam Investigator (WebView wrapper)
+name: detective_hermes_agent
+description: Detective Hermes Agent — Flutter WebView wrapper for the deployed investigation workspace.
 publish_to: "none"
 version: 2.0.0
 

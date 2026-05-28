@@ -65,12 +65,45 @@ def run(text: str) -> dict:
         parsed["latency_ms"] = int((time.time() - start) * 1000)
         return parsed
     except RuntimeError as e:
-        return {
-            "signals": [],
-            "risk_score": 0,
-            "reasoning": f"Behavior agent failed: {e}",
-            "safe_indicators": [],
-            "provider": nvidia_model(),
-            "latency_ms": int((time.time() - start) * 1000),
-            "error": str(e),
-        }
+        fallback = _heuristic_behavior(text)
+        fallback.update(
+            {
+                "provider": f"local_heuristic_after_{nvidia_model()}_failure",
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": str(e),
+            }
+        )
+        return fallback
+
+
+def _heuristic_behavior(text: str) -> dict:
+    lowered = text.lower()
+    signals = []
+    safe_indicators = []
+
+    checks = [
+        ("payment_or_deposit_request", any(term in lowered for term in ["deposit", "security fee", "registration fee", "refundable", "upi", "pay "])),
+        ("telegram_or_whatsapp_onboarding", "telegram" in lowered or "whatsapp" in lowered),
+        ("interview_bypassed", any(term in lowered for term in ["no interview", "without interview", "direct selection", "selected for"])),
+        ("urgency_pressure", any(term in lowered for term in ["within 24", "urgent", "limited slots", "reply immediately"])),
+        ("suspicious_internship_terms", "internship" in lowered and any(term in lowered for term in ["task", "certificate", "offer letter", "virtual"])),
+    ]
+    for name, matched in checks:
+        if matched:
+            signals.append(name)
+
+    if any(term in lowered for term in ["no fees", "no payment", "official careers", "interview"]):
+        safe_indicators.append("standard_or_no_fee_hiring_language")
+
+    risk = min(95, 15 + len(signals) * 18)
+    if "payment_or_deposit_request" in signals:
+        risk = max(risk, 70)
+    if "telegram_or_whatsapp_onboarding" in signals and "payment_or_deposit_request" in signals:
+        risk = max(risk, 88)
+
+    return {
+        "signals": signals,
+        "risk_score": risk if signals else 35,
+        "reasoning": "Deterministic fallback used because the primary behavior model failed. Risk is estimated from payment, channel, interview, urgency, and internship-pattern signals.",
+        "safe_indicators": safe_indicators,
+    }
