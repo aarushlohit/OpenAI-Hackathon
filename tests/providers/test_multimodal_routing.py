@@ -36,7 +36,7 @@ class MultimodalRoutingTests(unittest.TestCase):
             [Provider("openai"), Provider("nvidia_nim"), Provider("pollinations")],
         )
 
-        self.assertEqual([provider.name for provider in ordered], ["openai", "nvidia_nim"])
+        self.assertEqual([provider.name for provider in ordered], ["nvidia_nim", "openai"])
 
 
 if __name__ == "__main__":

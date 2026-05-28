@@ -1,8 +1,11 @@
 from app.agents.behavior import BehaviorAnalysisAgent
+from app.agents.audio_analysis_agent import AudioAnalysisAgent
 from app.agents.intake_agent import IntakeAgent
 from app.agents.osint import OSINTAgent
 from app.agents.vision import VisionAnalysisAgent
+from app.agents.web_search_agent import WebSearchAgent
 from app.core.config import get_settings
+from app.providers.nvidia_reasoning_client import NvidiaReasoningClient, NvidiaReasoningError
 from app.events.bus import InMemoryEventBus
 from app.gateway.audio_router import AudioRouter
 from app.gateway.capabilities import ProviderModality, default_capability_registry
@@ -127,6 +130,23 @@ class AppContainer:
             max_retries=self.settings.ai_max_retries,
         )
 
+        nvidia_api_key = ""
+        if self.settings.nvidia_nim_api_key is not None:
+            nvidia_api_key = self.settings.nvidia_nim_api_key.get_secret_value()
+        pollinations_api_key = ""
+        if self.settings.pollinations_api_key is not None:
+            pollinations_api_key = self.settings.pollinations_api_key.get_secret_value()
+        self.nvidia_client: NvidiaReasoningClient | None = None
+        if nvidia_api_key:
+            try:
+                self.nvidia_client = NvidiaReasoningClient(
+                    api_key=nvidia_api_key,
+                    timeout=self.settings.ai_request_timeout_seconds,
+                    pollinations_api_key=pollinations_api_key,
+                )
+            except NvidiaReasoningError:
+                self.nvidia_client = None
+
         openai = OpenAIProvider(self.settings)
         nvidia = NvidiaNimProvider(self.settings)
         pollinations = PollinationsProvider(self.settings)
@@ -161,17 +181,24 @@ class AppContainer:
         self.orchestrator = InvestigationEngine(
             agents=[
                 IntakeAgent(IntakePolicy()),
-                BehaviorAnalysisAgent(self.prompt_registry),
+                BehaviorAnalysisAgent(self.prompt_registry, self.nvidia_client),
                 OSINTAgent(
                     whois_service=WhoisService(),
                     reputation_service=DomainReputationService(),
                     scam_lookup_service=ScamLookupService(),
                     prompt_registry=self.prompt_registry,
+                    nvidia_client=self.nvidia_client,
                 ),
                 VisionAnalysisAgent(
                     ocr_service=SafeOCRService(),
                     prompt_registry=self.prompt_registry,
+                    nvidia_client=self.nvidia_client,
                 ),
+                AudioAnalysisAgent(
+                    audio_router=self.audio_router,
+                    nvidia_client=self.nvidia_client,
+                ),
+                WebSearchAgent(),
             ],
             event_bus=self.event_bus,
             pipeline_router=self.pipeline_router,
@@ -187,6 +214,7 @@ class AppContainer:
             report_builder=ReportBuilder(),
             agent_metrics=self.agent_metrics,
             graph_metrics=self.graph_metrics,
+            provider_metrics=self.provider_metrics,
             agent_timeout_seconds=self.settings.agent_timeout_seconds,
         )
 

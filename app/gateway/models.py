@@ -58,6 +58,18 @@ class AudioTranscriptionResponse(ProviderResponse):
     pass
 
 
+class AudioAnalysisRequest(BaseModel):
+    system_prompt: str = Field(min_length=1, max_length=8_000)
+    user_prompt: str = Field(min_length=1, max_length=20_000)
+    audio_reference: str = Field(min_length=1, max_length=2_000)
+    response_schema: dict[str, Any] | None = None
+    language_hint: str | None = Field(default=None, min_length=2, max_length=32)
+
+
+class AudioAnalysisResponse(ProviderResponse):
+    pass
+
+
 class EmbeddingRequest(BaseModel):
     content: str = Field(min_length=1, max_length=40_000)
     dimensions: int | None = Field(default=None, ge=128, le=4096)

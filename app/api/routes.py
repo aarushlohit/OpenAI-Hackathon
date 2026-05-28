@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Request
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Request, UploadFile, File
 
 from app.schemas.investigation import InvestigationRequest, InvestigationResult
 
@@ -13,6 +16,41 @@ async def create_investigation(payload: InvestigationRequest, request: Request) 
 @router.post("/investigate", response_model=InvestigationResult)
 async def investigate_alias(payload: InvestigationRequest, request: Request) -> InvestigationResult:
     return await create_investigation(payload, request)
+
+
+@router.post("/investigate/upload")
+async def upload_evidence(
+    file: UploadFile = File(...),
+    request: Request = None,
+) -> dict[str, str | int]:
+    """Upload image, PDF, or audio evidence for investigation."""
+    content = await file.read()
+    file_type = file.content_type or ""
+    upload_dir = Path(".runtime/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename or "evidence.bin").name
+    stored_name = f"{uuid4().hex}_{safe_name}"
+    stored_path = upload_dir / stored_name
+    stored_path.write_bytes(content)
+    
+    # Determine investigation kind
+    if "image" in file_type:
+        kind = "image_reference"
+    elif "pdf" in file_type:
+        kind = "document_reference"
+    elif "audio" in file_type:
+        kind = "audio_reference"
+    else:
+        kind = "text"
+    
+    return {
+        "file_reference": str(stored_path),
+        "display_name": safe_name,
+        "kind": kind,
+        "size_bytes": len(content),
+        "content_type": file_type,
+    }
+
 
 @router.get("/health")
 async def health() -> dict[str, str]:

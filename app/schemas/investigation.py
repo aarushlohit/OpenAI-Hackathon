@@ -12,6 +12,7 @@ class InvestigationInputKind(StrEnum):
     URL = "url"
     DOCUMENT_REFERENCE = "document_reference"
     IMAGE_REFERENCE = "image_reference"
+    AUDIO_REFERENCE = "audio_reference"
 
 
 class RiskLevel(StrEnum):
@@ -48,3 +49,5 @@ class InvestigationResult(BaseModel):
     correlation_id: UUID
     finding: InvestigationFinding
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    active_provider: str | None = None
+    active_model: str | None = None

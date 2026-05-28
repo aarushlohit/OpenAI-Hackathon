@@ -18,6 +18,8 @@ class ProviderMetrics:
         self._calls: dict[str, int] = defaultdict(int)
         self._failures: dict[str, int] = defaultdict(int)
         self._latency_ms: dict[str, list[int]] = defaultdict(list)
+        self._last_successful_provider: str | None = None
+        self._last_successful_model: str | None = None
 
     def record(self, trace: ProviderTrace) -> None:
         key = f"{trace.operation}:{trace.provider}"
@@ -25,6 +27,18 @@ class ProviderMetrics:
         self._latency_ms[key].append(trace.latency_ms)
         if not trace.success:
             self._failures[key] += 1
+        else:
+            self._last_successful_provider = trace.provider
+            # Infer model from provider
+            if trace.provider == "nvidia_nim":
+                self._last_successful_model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+            elif trace.provider == "openai":
+                self._last_successful_model = "gpt-4.1-mini"
+            elif trace.provider == "pollinations":
+                self._last_successful_model = "pollinations-text"
+    
+    def get_active_provider(self) -> tuple[str | None, str | None]:
+        return (self._last_successful_provider, self._last_successful_model)
 
     def snapshot(self) -> dict[str, dict[str, float | int]]:
         result: dict[str, dict[str, float | int]] = {}

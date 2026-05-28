@@ -1,58 +1,96 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+import sys
 
 from app.agents.base import AgentContext, InvestigationAgent
-from app.models.behavior_result import BehaviorResult
+from app.models.behavior_result import BehaviorResult, BehaviorSignal
+from app.providers.nvidia_reasoning_client import NVIDIA_MODEL, NvidiaReasoningClient
 from app.prompts import PromptRegistry
 from app.schemas.investigation import InvestigationRequest
-from app.services.scoring import clamp_score
+from app.security.model_output_validator import ModelOutputValidator
 
 
-@dataclass(frozen=True)
-class BehaviorPattern:
-    label: str
-    terms: tuple[str, ...]
-    weight: int
+def _console_log(message: str) -> None:
+    print(f"[BEHAVIOR] {message}", file=sys.stderr, flush=True)
+
+
+_BEHAVIOR_SYSTEM_PROMPT = (
+    "Return minified JSON only. Do not explain. Do not reason in prose. "
+    "Analyze recruitment fraud risk. Use exactly one strongest signal."
+)
 
 
 class BehaviorAnalysisAgent(InvestigationAgent):
     name = "behavior"
 
-    patterns = (
-        BehaviorPattern("urgency_manipulation", ("urgent", "immediately", "limited time", "today"), 16),
-        BehaviorPattern("payment_coercion", ("deposit", "fee", "payment", "pay now"), 30),
-        BehaviorPattern("fake_prestige", ("top mnc", "fortune", "guaranteed job", "exclusive"), 12),
-        BehaviorPattern("emotional_pressure", ("trust me", "do not miss", "last chance"), 12),
-        BehaviorPattern("scarcity_tactics", ("only few seats", "limited slots", "first come"), 14),
-        BehaviorPattern("authority_abuse", ("hr head", "director approval", "official mandate"), 12),
-        BehaviorPattern("telegram_only_onboarding", ("telegram", "join channel", "telegram group"), 20),
-        BehaviorPattern("interview_bypass", ("no interview", "direct offer", "selected without interview"), 24),
-        BehaviorPattern("refundable_deposit", ("refundable deposit", "security deposit"), 32),
-    )
-
-    def __init__(self, prompt_registry: PromptRegistry) -> None:
+    def __init__(self, prompt_registry: PromptRegistry, nvidia_client: NvidiaReasoningClient | None = None) -> None:
         self._prompt_registry = prompt_registry
+        self._nvidia_client = nvidia_client
+        self._validator = ModelOutputValidator()
 
     async def run(self, request: InvestigationRequest, context: AgentContext) -> BehaviorResult:
-        await context.log(request, self.name, "Scanning recruitment language for social engineering patterns")
-        self._prompt_registry.load("behavior", "system_prompt")
-        lowered = request.raw_input.lower()
-        detected = [pattern for pattern in self.patterns if any(term in lowered for term in pattern.terms)]
-        labels = [pattern.label for pattern in detected]
-        score = clamp_score(sum(pattern.weight for pattern in detected))
-        confidence = min(0.95, 0.35 + (len(detected) * 0.12))
-        explanation = self._explain(labels)
-        await context.log(request, self.name, f"Detected {len(labels)} behavior pattern(s)")
-        return BehaviorResult(
-            investigation_id=request.investigation_id,
-            risk_score=score,
-            confidence=confidence,
-            detected_patterns=labels,
-            explanation=explanation,
+        await context.log(request, self.name, "Starting AI behavioral analysis")
+
+        if self._nvidia_client is None:
+            raise RuntimeError("NVIDIA runtime unavailable. Investigation aborted.")
+
+        _console_log("NVIDIA cognition started...")
+        _console_log(f"Model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
+
+        user_prompt = (
+            f"EVIDENCE:\n{request.raw_input}\n\n"
+            "Return this JSON with real values: "
+            '{"risk_score":0-100,"risk_level":"LOW|MEDIUM|HIGH|CRITICAL",'
+            '"confidence":0.0-1.0,"signals":[{"name":"...",'
+            '"severity":"LOW|MEDIUM|HIGH|CRITICAL","confidence":0.0-1.0,'
+            '"source":"ai_reasoned","explanation":"max 40 chars"}],'
+            '"summary":"max 80 chars","recommended_action":"max 60 chars",'
+            '"reasoning_type":"behavioral_analysis"}'
         )
 
-    def _explain(self, labels: list[str]) -> str:
-        if not labels:
-            return "No high-risk social engineering pattern was detected in the supplied text."
-        readable = ", ".join(label.replace("_", " ") for label in labels)
-        return f"Detected high-risk social engineering patterns: {readable}. Findings are evidence-based and not a definitive accusation."
+        ai_output, latency_ms = await self._nvidia_client.analyze_text(
+            system_prompt=_BEHAVIOR_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.15,
+            max_tokens=900,
+        )
+        _console_log(f"Response received ({latency_ms}ms)")
 
+        validated = self._validator.validate_behavior_output(ai_output)
+
+        ai_signals = [
+            BehaviorSignal(
+                name=sig.get("name", "unknown"),
+                severity=sig.get("severity", "medium"),
+                confidence=min(1.0, max(0.0, float(sig.get("confidence", 0.5)))),
+                explanation=sig.get("explanation", "")[:1000],
+                source=sig.get("source", "ai_reasoned"),
+            )
+            for sig in validated.get("signals", [])
+        ]
+        risk_score = min(100, max(0, int(validated.get("risk_score", 0))))
+        confidence = min(1.0, max(0.0, float(validated.get("confidence", 0.5))))
+        metadata = self._nvidia_client.last_metadata
+        provider = metadata.provider if metadata else "nvidia_nim"
+        model = metadata.model if metadata else NVIDIA_MODEL
+
+        for sig in ai_signals:
+            _console_log(f"  {sig.name}: {sig.severity.upper()} ({sig.confidence:.0%} confidence)")
+
+        result = BehaviorResult(
+            investigation_id=request.investigation_id,
+            risk_score=risk_score,
+            confidence=confidence,
+            detected_patterns=[sig.name for sig in ai_signals],
+            explanation=validated.get("summary", "")[:2000],
+            provider=provider,
+            provider_model=model,
+            reasoning_type="behavioral_analysis",
+            ai_signals=ai_signals,
+            summary=validated.get("summary", "")[:500],
+        )
+        await context.log(
+            request, self.name,
+            f"Behavior analysis complete: risk_score={risk_score}, signals={len(ai_signals)}, provider={provider}"
+        )
+        return result

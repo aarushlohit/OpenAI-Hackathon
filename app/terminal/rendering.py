@@ -76,12 +76,18 @@ class TerminalRenderer:
     def result(self, result: InvestigationResult) -> None:
         finding = result.finding
         verdict = f"{finding.risk_level.value.upper()} RISK - {finding.summary}"
+        provider_info = ""
+        if result.active_provider:
+            provider_info = f"\n[bold]Primary Cognition:[/bold] {result.active_provider}"
+            if result.active_model:
+                provider_info += f" ({result.active_model})"
         self._console.print(
             Panel(
                 f"[bold]Investigation:[/bold] {result.investigation_id}\n"
                 f"[bold]Risk:[/bold] {finding.risk_level}\n"
                 f"[bold]Final Verdict:[/bold] {escape(verdict)}\n"
-                f"[bold]Actions:[/bold] {', '.join(finding.recommended_actions)}",
+                f"[bold]Actions:[/bold] {', '.join(finding.recommended_actions)}"
+                f"{provider_info}",
                 title="Investigation Result",
                 border_style="green",
             )

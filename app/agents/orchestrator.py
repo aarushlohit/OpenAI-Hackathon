@@ -4,6 +4,7 @@ from app.agents.base import AgentContext, InvestigationAgent
 from app.contracts.agent_result import AgentResult
 from app.events.bus import InMemoryEventBus
 from app.events.models import EventEnvelope, EventName
+from app.models.audio_result import AudioResult
 from app.models.behavior_result import BehaviorResult
 from app.models.osint_result import OSINTResult
 from app.models.threat_score import ThreatScore, ThreatSeverity
@@ -18,7 +19,7 @@ from app.schemas.investigation import (
     InvestigationResult,
     RiskLevel,
 )
-from app.scoring import ThreatScoringEngine
+from app.scoring.hybrid_verdict_engine import HybridVerdictEngine
 
 
 class InvestigationOrchestrator:
@@ -27,14 +28,13 @@ class InvestigationOrchestrator:
         agents: list[InvestigationAgent],
         event_bus: InMemoryEventBus,
         memory_repository: MemoryRepository,
-        scoring_engine: ThreatScoringEngine,
         agent_metrics: AgentMetrics,
     ) -> None:
         self._agents = agents
         self._event_bus = event_bus
         self._memory_repository = memory_repository
-        self._scoring_engine = scoring_engine
         self._agent_metrics = agent_metrics
+        self._hybrid_verdict_engine = HybridVerdictEngine()
 
     async def investigate(self, request: InvestigationRequest) -> InvestigationResult:
         await self._event_bus.publish(
@@ -84,13 +84,29 @@ class InvestigationOrchestrator:
                 )
             )
 
-        threat_score = await self._scoring_engine.score(request.investigation_id, agent_results)
+        # Use hybrid verdict engine to produce trustworthy verdicts
+        threat_score, verdict_components = await self._hybrid_verdict_engine.produce_verdict(
+            request.investigation_id, agent_results
+        )
+
         if threat_score.severity in {ThreatSeverity.HIGH, ThreatSeverity.CRITICAL}:
             await self._event_bus.publish(
                 EventEnvelope(
                     event=EventName.THREAT_DETECTED,
                     correlation_id=request.correlation_id,
-                    payload=threat_score.model_dump(mode="json"),
+                    payload={
+                        **threat_score.model_dump(mode="json"),
+                        "verdict_components": [
+                            {
+                                "type": vc.component_type,
+                                "provider": vc.provider,
+                                "model": vc.model,
+                                "confidence": vc.confidence,
+                                "signals_count": len(vc.signals),
+                            }
+                            for vc in verdict_components
+                        ],
+                    },
                 )
             )
 
@@ -116,6 +132,15 @@ class InvestigationOrchestrator:
                     "result": result.model_dump(mode="json"),
                     "agent_results": [agent_result.model_dump(mode="json") for agent_result in agent_results],
                     "threat_score": threat_score.model_dump(mode="json"),
+                    "verdict_components": [
+                        {
+                            "type": vc.component_type,
+                            "provider": vc.provider,
+                            "model": vc.model,
+                            "signals": [s.model_dump(mode="json") for s in vc.signals],
+                        }
+                        for vc in verdict_components
+                    ],
                 },
             )
         )
@@ -161,5 +186,10 @@ class InvestigationOrchestrator:
                 detail = ", ".join(result.suspicious_elements) or "No suspicious visual element found."
                 evidence.append(
                     EvidenceItem(label="Vision analysis", detail=detail, confidence=result.confidence)
+                )
+            elif isinstance(result, AudioResult):
+                patterns = ", ".join(result.detected_patterns) or "No suspicious audio patterns found."
+                evidence.append(
+                    EvidenceItem(label="Audio analysis", detail=patterns, confidence=result.confidence)
                 )
         return evidence

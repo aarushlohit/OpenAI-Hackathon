@@ -13,10 +13,12 @@ from app.memory.investigation_repository import InvestigationRepository
 from app.memory.session_memory import SessionMemory
 from app.memory.threat_memory import ThreatMemory
 from app.models.behavior_result import BehaviorResult
+from app.models.audio_result import AudioResult
 from app.models.osint_result import OSINTResult
 from app.models.threat_score import ThreatScore, ThreatSeverity
 from app.models.vision_result import VisionResult
-from app.observability import AgentMetrics, AgentTrace, GraphMetrics
+from app.models.web_search_result import WebSearchResult
+from app.observability import AgentMetrics, AgentTrace, GraphMetrics, ProviderMetrics, ProviderTrace
 from app.orchestrator.context_manager import InvestigationContextManager
 from app.orchestrator.pipeline_router import PipelineRouter
 from app.reporting import ReportBuilder
@@ -48,6 +50,7 @@ class InvestigationEngine:
         report_builder: ReportBuilder,
         agent_metrics: AgentMetrics,
         graph_metrics: GraphMetrics,
+        provider_metrics: ProviderMetrics,
         agent_timeout_seconds: float = 15.0,
     ) -> None:
         self._agents = {agent.name: agent for agent in agents}
@@ -65,6 +68,7 @@ class InvestigationEngine:
         self._report_builder = report_builder
         self._agent_metrics = agent_metrics
         self._graph_metrics = graph_metrics
+        self._provider_metrics = provider_metrics
         self._agent_timeout_seconds = agent_timeout_seconds
 
     async def investigate(self, request: InvestigationRequest) -> InvestigationResult:
@@ -76,10 +80,28 @@ class InvestigationEngine:
         await self._investigation_repository.save_context(context)
         await self._publish(request, EventName.INVESTIGATION_STARTED, {"workflow": workflow.name})
         await self._publish(request, EventName.INVESTIGATION_PROGRESS, {"message": "Classifying evidence"})
+        for message in (
+            "Analyzing recruiter behavior...",
+            "Evaluating onboarding legitimacy...",
+            "Checking domain intelligence...",
+            "Verifying company legitimacy on the web...",
+            "Correlating threat graph...",
+            "Validating payment coercion signals...",
+            "Running cross-agent consensus...",
+            "Generating explainable verdict...",
+        ):
+            await self._publish(request, EventName.INVESTIGATION_PROGRESS, {"message": message})
+        
+        # Track active provider from metrics
+        active_provider = None
+        active_model = None
 
         results: list[AgentResult] = []
         for agent_name in workflow.required_agents:
-            result = await self._run_agent(agent_name, request)
+            try:
+                result = await self._run_agent(agent_name, request)
+            except Exception as error:
+                raise RuntimeError("NVIDIA runtime unavailable. Investigation aborted.") from error
             if result is not None:
                 results.append(result)
                 context = context.with_result(result)
@@ -90,8 +112,12 @@ class InvestigationEngine:
         )
         for result in parallel_results:
             if isinstance(result, Exception):
+                import traceback
+                print("--- INNER EXCEPTION ---")
+                traceback.print_exception(type(result), result, result.__traceback__)
+                print("-----------------------")
                 await self._publish(request, EventName.INVESTIGATION_PROGRESS, {"warning": str(result)})
-                continue
+                raise RuntimeError("NVIDIA runtime unavailable. Investigation aborted.") from result
             if result is not None:
                 results.append(result)
                 context = context.with_result(result)
@@ -115,6 +141,10 @@ class InvestigationEngine:
 
         evidence = self._evidence_from_results(results)
         report = self._report_builder.build(context, threat_score, evidence)
+        
+        # Get active provider from metrics
+        active_provider, active_model = self._provider_metrics.get_active_provider()
+        
         result = InvestigationResult(
             investigation_id=request.investigation_id,
             correlation_id=request.correlation_id,
@@ -127,6 +157,8 @@ class InvestigationEngine:
                     "Preserve original artifacts for sandbox analysis.",
                 ],
             ),
+            active_provider=active_provider,
+            active_model=active_model,
         )
         await self._publish(
             request,
@@ -170,9 +202,21 @@ class InvestigationEngine:
                 {"duration_ms": duration_ms, "error": str(error)},
                 agent=agent.name,
             )
-            return None
+            raise
         duration_ms = int((perf_counter() - started) * 1000)
         self._agent_metrics.record(AgentTrace(request.investigation_id, agent.name, duration_ms, True))
+        provider = getattr(result, "provider", None)
+        if isinstance(provider, str) and provider in {"nvidia_nim", "openai", "pollinations"}:
+            self._provider_metrics.record(
+                ProviderTrace(
+                    investigation_id=request.investigation_id,
+                    request_id=f"{request.investigation_id}:{agent.name}",
+                    provider=provider,
+                    operation=agent.name,
+                    latency_ms=duration_ms,
+                    success=True,
+                )
+            )
         await self._publish(request, EventName.AGENT_COMPLETED, {"duration_ms": duration_ms}, agent=agent.name)
         return result
 
@@ -210,4 +254,19 @@ class InvestigationEngine:
             elif isinstance(result, VisionResult):
                 detail = ", ".join(result.suspicious_elements) or "No suspicious visual element found."
                 evidence.append(EvidenceItem(label="Vision analysis", detail=detail, confidence=result.confidence))
+            elif isinstance(result, AudioResult):
+                detail = ", ".join(result.detected_patterns) or result.summary or "No suspicious audio pattern found."
+                evidence.append(EvidenceItem(label="Audio analysis", detail=detail, confidence=result.confidence))
+            elif isinstance(result, WebSearchResult):
+                verified = ", ".join(result.verified_entities) or "None confirmed"
+                unverified = ", ".join(result.unverified_entities) or "None"
+                delta_str = f"Score adjusted {result.trust_delta:+d}" if result.trust_delta != 0 else "No adjustment"
+                detail = f"Verified: {verified}. Unverified: {unverified}. {delta_str}."
+                if result.web_summary:
+                    detail += f" {result.web_summary}"
+                evidence.append(EvidenceItem(
+                    label="Web verification",
+                    detail=detail[:500],
+                    confidence=0.90 if result.search_performed else 0.70,
+                ))
         return evidence

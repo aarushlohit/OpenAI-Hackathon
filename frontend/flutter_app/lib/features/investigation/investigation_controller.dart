@@ -31,7 +31,7 @@ class InvestigationController extends StateNotifier<InvestigationState> {
 
   // ── Public API ──────────────────────────────────────────────────────────
 
-  Future<void> start(String input) async {
+  Future<void> start(String input, {String kind = 'text'}) async {
     state = state.copyWith(
       status: SocketStatus.connecting,
       events: const [],
@@ -47,9 +47,11 @@ class InvestigationController extends StateNotifier<InvestigationState> {
       graphEdgeCount: 0,
     );
 
-    final result = await _repository.start(input);
+    final result = await _repository.start(input, kind: kind);
     final investigationId = result['investigation_id']?.toString() ?? '';
     final correlationId = result['correlation_id']?.toString() ?? '';
+    final activeProvider = result['active_provider']?.toString() ?? '';
+    final activeModel = result['active_model']?.toString() ?? '';
 
     state = state.copyWith(
       investigationId: investigationId,
@@ -57,7 +59,7 @@ class InvestigationController extends StateNotifier<InvestigationState> {
       status: SocketStatus.live,
       severity: _findingSeverity(result),
       threatScore: _scoreFromFinding(result),
-      activeProvider: result['provider']?.toString() ?? '',
+      activeProvider: _formatProvider(activeProvider, activeModel),
     );
 
     await _subscription?.cancel();
@@ -66,6 +68,17 @@ class InvestigationController extends StateNotifier<InvestigationState> {
       onError: (_) => state = state.copyWith(status: SocketStatus.degraded),
       onDone: () => state = state.copyWith(status: SocketStatus.degraded),
     );
+  }
+
+  Future<void> uploadFile(String filePath, String fileName) async {
+    state = state.copyWith(status: SocketStatus.connecting);
+    
+    final uploadResult = await _repository.uploadFile(filePath, fileName);
+    final fileRef = uploadResult['file_reference']?.toString() ?? fileName;
+    final kind = uploadResult['kind']?.toString() ?? 'text';
+    
+    // Start investigation with file reference
+    await start(fileRef, kind: kind);
   }
 
   // ── Event reducer ───────────────────────────────────────────────────────
@@ -127,6 +140,14 @@ class InvestigationController extends StateNotifier<InvestigationState> {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
+
+  String _formatProvider(String provider, String model) {
+    if (provider.isEmpty) return 'No active cognition runtime.';
+    if (provider == 'nvidia_nim') return 'NVIDIA Nemotron Omni';
+    if (provider == 'openai') return 'OpenAI GPT-4.1 Mini';
+    if (provider == 'pollinations') return 'Pollinations';
+    return provider;
+  }
 
   String _findingSeverity(Map<String, Object?> result) {
     final finding = result['finding'];

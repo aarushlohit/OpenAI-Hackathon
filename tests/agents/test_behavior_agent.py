@@ -8,16 +8,11 @@ from app.schemas.investigation import InvestigationRequest
 
 
 class BehaviorAgentTests(unittest.IsolatedAsyncioTestCase):
-    async def test_detects_refundable_deposit_and_telegram(self) -> None:
+    async def test_fails_closed_without_provider(self) -> None:
         agent = BehaviorAnalysisAgent(PromptRegistry())
         request = InvestigationRequest(
             raw_input="Join Telegram now for direct offer. Pay refundable deposit today."
         )
 
-        result = await agent.run(request, AgentContext(InMemoryEventBus()))
-
-        self.assertIn("telegram_only_onboarding", result.detected_patterns)
-        self.assertIn("refundable_deposit", result.detected_patterns)
-        self.assertGreaterEqual(result.risk_score, 50)
-        self.assertNotIn("definitely scam", result.explanation.lower())
-
+        with self.assertRaisesRegex(RuntimeError, "NVIDIA runtime unavailable"):
+            await agent.run(request, AgentContext(InMemoryEventBus()))

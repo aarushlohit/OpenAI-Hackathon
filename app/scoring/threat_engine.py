@@ -33,6 +33,7 @@ _SIGNAL_WEIGHTS: dict[str, tuple[float, int]] = {
     "osint_reputation_low": (0.80, 12),
     "newly_registered_domain": (0.82, 12),
     "invalid_tls": (0.65, 8),
+    "ai_behavior_risk_score": (1.00, 0),
 }
 
 # Patterns that map directly to named signal keys for lookup
@@ -55,6 +56,21 @@ _PATTERN_SIGNAL_MAP: dict[str, str] = {
     "newly_registered_domain": "newly_registered_domain",
     "invalid_tls": "invalid_tls",
 }
+
+
+def _canonical_signal(value: str) -> str:
+    normalized = value.lower().strip().replace("-", "_").replace(" ", "_")
+    if normalized in _PATTERN_SIGNAL_MAP:
+        return _PATTERN_SIGNAL_MAP[normalized]
+    if "payment" in normalized or "upi" in normalized or "refundable" in normalized:
+        return "payment_coercion"
+    if "telegram" in normalized or "channel" in normalized:
+        return "telegram_only_onboarding"
+    if "impersonation" in normalized or "hr" in normalized or "recruiter" in normalized:
+        return "recruiter_impersonation"
+    if "urgency" in normalized or "pressure" in normalized or "manipulation" in normalized:
+        return "urgency_manipulation"
+    return normalized
 
 
 class ThreatScoringEngine:
@@ -123,7 +139,7 @@ class ThreatScoringEngine:
             else min(1.0, result.risk_score / 100.0)
         )
         for pattern in result.detected_patterns:
-            key = _PATTERN_SIGNAL_MAP.get(pattern, pattern)
+            key = _canonical_signal(pattern)
             weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.75, 10))
             # Contribution = base_pts × weight (not further discounted by confidence —
             # confidence is stored as metadata, not a penalty on detected patterns).
@@ -136,6 +152,17 @@ class ThreatScoringEngine:
                     confidence=round(effective_confidence, 3),
                     source="behavior_agent",
                     detail=f"Pattern '{pattern}' detected; risk_score={result.risk_score}",
+                )
+            )
+        if result.provider in {"nvidia_nim", "pollinations", "openai"} and result.risk_score > 0:
+            out.append(
+                EvidenceSignal(
+                    signal="ai_behavior_risk_score",
+                    weight=1.0,
+                    score_contribution=int(result.risk_score * 0.75),
+                    confidence=round(effective_confidence, 3),
+                    source="behavior_agent",
+                    detail=f"AI behavior risk score: {result.risk_score}/100",
                 )
             )
         return out
@@ -156,7 +183,7 @@ class ThreatScoringEngine:
                 )
             )
         for indicator in result.suspicious_indicators:
-            key = _PATTERN_SIGNAL_MAP.get(indicator, indicator)
+            key = _canonical_signal(indicator)
             weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.50, 6))
             out.append(
                 EvidenceSignal(
@@ -198,7 +225,7 @@ class ThreatScoringEngine:
     def _from_vision(self, result: VisionResult) -> list[EvidenceSignal]:
         out: list[EvidenceSignal] = []
         for element in result.suspicious_elements:
-            key = _PATTERN_SIGNAL_MAP.get(element, element)
+            key = _canonical_signal(element)
             weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.55, 8))
             out.append(
                 EvidenceSignal(
@@ -208,6 +235,19 @@ class ThreatScoringEngine:
                     confidence=0.70,
                     source="vision_agent",
                     detail=f"Visual element flagged: {element}",
+                )
+            )
+        for artifact in result.ai_artifacts:
+            key = _canonical_signal(f"{artifact.artifact_type} {artifact.description}")
+            weight, base_pts = _SIGNAL_WEIGHTS.get(key, (0.55, 8))
+            out.append(
+                EvidenceSignal(
+                    signal=key,
+                    weight=weight,
+                    score_contribution=int(base_pts * weight),
+                    confidence=round(artifact.confidence, 3),
+                    source="vision_agent",
+                    detail=f"AI visual artifact: {artifact.artifact_type}",
                 )
             )
         return out

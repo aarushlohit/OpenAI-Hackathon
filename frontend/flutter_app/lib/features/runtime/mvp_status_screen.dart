@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../dashboard/dashboard_screen.dart';
+import '../../shell/hermes_app_shell.dart';
 import '../../widgets/status_chip.dart';
-import '../investigation/investigation_controller.dart';
+import '../chat/chat_controller.dart';
 
 /// MVP boot screen — boots runtime health, then transitions to DashboardScreen.
 /// Shows a cinematic status banner while loading.
@@ -26,7 +26,7 @@ class MvpStatusScreen extends ConsumerWidget {
               child: child,
             ),
             child: ready
-                ? const DashboardScreen()
+                ? const HermesAppShell()
                 : _SplashScreen(
                     key: const ValueKey('splash'),
                     loading: !snapshot.hasError,
@@ -39,7 +39,7 @@ class MvpStatusScreen extends ConsumerWidget {
   }
 
   Future<Map<String, Object?>> _load(WidgetRef ref) async {
-    final api = ref.read(apiClientProvider);
+    final api = ref.read(chatApiClientProvider);
     try {
       final health = await api.runtimeHealth();
       final bootstrap = await api.runtimeBootstrap();

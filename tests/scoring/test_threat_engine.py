@@ -15,6 +15,8 @@ class ThreatEngineTests(unittest.IsolatedAsyncioTestCase):
                     confidence=0.9,
                     detected_patterns=["payment_coercion", "telegram_only_onboarding"],
                     explanation="Detected high-risk social engineering patterns.",
+                    provider="deterministic",
+                    provider_model="keyword_matcher",
                 )
             ],
         )

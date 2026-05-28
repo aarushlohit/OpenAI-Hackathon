@@ -12,6 +12,10 @@ class InvestigationRepository {
     return api.startInvestigation(rawInput: input, kind: kind);
   }
 
+  Future<Map<String, Object?>> uploadFile(String filePath, String fileName) {
+    return api.uploadEvidence(filePath, fileName);
+  }
+
   Stream<InvestigationEvent> watch(String correlationId) {
     return socket.connect(correlationId);
   }

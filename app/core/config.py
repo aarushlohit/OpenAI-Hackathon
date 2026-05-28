@@ -25,8 +25,9 @@ class Settings(BaseSettings):
 
     pollinations_base_url: AnyUrl = "https://text.pollinations.ai"
     pollinations_chat_url: AnyUrl = "https://gen.pollinations.ai/v1/chat/completions"
-    pollinations_text_model: str = "openai"
-    pollinations_vision_model: str = "openai"
+    pollinations_api_key: SecretStr | None = None
+    pollinations_text_model: str = "qwen-safety"
+    pollinations_vision_model: str = "mistral"
     pollinations_embedding_model: str = "openai"
 
     postgres_dsn: str = "postgresql+asyncpg://hermes:hermes@localhost:5432/hermes_x"
@@ -35,20 +36,20 @@ class Settings(BaseSettings):
     neo4j_password: SecretStr | None = None
     redis_dsn: str = "redis://localhost:6379/0"
 
-    primary_text_provider: str = "openai"
-    fallback_text_provider: str = "nvidia"
+    primary_text_provider: str = "nvidia"
+    fallback_text_provider: str = "openai"
     last_resort_text_provider: str = "pollinations"
-    primary_vision_provider: str = "openai"
-    fallback_vision_provider: str = "nvidia"
+    primary_vision_provider: str = "nvidia"
+    fallback_vision_provider: str = "openai"
     last_resort_vision_provider: str = "pollinations"
-    primary_audio_provider: str = "openai"
-    fallback_audio_provider: str = "nvidia"
+    primary_audio_provider: str = "nvidia"
+    fallback_audio_provider: str = "openai"
     primary_embedding_provider: str = "openai"
     fallback_embedding_provider: str = "pollinations"
 
     ai_request_timeout_seconds: float = Field(default=30.0, gt=0)
     ai_max_retries: int = Field(default=2, ge=0, le=5)
-    agent_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    agent_timeout_seconds: float = Field(default=75.0, gt=0, le=180)
     provider_circuit_failure_threshold: int = Field(default=3, ge=1, le=20)
     provider_circuit_recovery_seconds: int = Field(default=60, ge=5, le=3600)
     event_stream_buffer_size: int = Field(default=500, ge=10, le=10_000)

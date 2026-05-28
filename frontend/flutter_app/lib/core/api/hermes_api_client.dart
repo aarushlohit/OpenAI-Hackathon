@@ -70,5 +70,13 @@ class HermesApiClient {
     final response = await _dio.get<Map<String, Object?>>(path);
     return response.data ?? const {};
   }
+
+  Future<Map<String, Object?>> uploadEvidence(String filePath, String fileName) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    final response = await _dio.post<Map<String, Object?>>('/v1/investigate/upload', data: formData);
+    return response.data ?? const {};
+  }
 }
 

@@ -13,14 +13,13 @@ class FailingAgent(InvestigationAgent):
 
 
 class InvestigationEngineTests(unittest.IsolatedAsyncioTestCase):
-    async def test_partial_agent_failure_still_completes(self) -> None:
+    async def test_agent_failure_aborts_investigation(self) -> None:
         container = AppContainer()
-        container.orchestrator._agents["vision"] = FailingAgent()
+        container.orchestrator._agents["behavior"] = FailingAgent()
         request = InvestigationRequest(raw_input="Pay refundable deposit on Telegram today")
 
-        result = await container.orchestrator.investigate(request)
+        with self.assertRaisesRegex(RuntimeError, "Investigation aborted"):
+            await container.orchestrator.investigate(request)
         events = await container.investigation_repository.list_events(request.investigation_id)
 
-        self.assertEqual(result.investigation_id, request.investigation_id)
         self.assertTrue(any(event.event == "agent_failed" for event in events))
-
