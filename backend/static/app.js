@@ -353,7 +353,6 @@ function startNewInvestigation() {
   $('messagesContainer').innerHTML = '';
   $('messageInput').value = '';
   $('messageInput').style.height = 'auto';
-  if ($('imagePathInput')) $('imagePathInput').value = '';
   removeImage();
   agentResults = {};
   currentHermesMessageEl = null;
@@ -406,8 +405,7 @@ async function sendInvestigation() {
   if (isInvestigating) return;
 
   const text = $('messageInput').value.trim();
-  const imagePath = $('imagePathInput')?.value.trim() || '';
-  if (!text && !attachedImage && !imagePath) return;
+  if (!text && !attachedImage) return;
 
   isInvestigating = true;
   $('sendBtn').disabled = true;
@@ -417,12 +415,11 @@ async function sendInvestigation() {
   showConversation();
 
   // Render user message
-  renderUserMessage(text || imagePath, attachedImage?.dataUrl);
+  renderUserMessage(text, attachedImage?.dataUrl);
 
   // Clear input
   $('messageInput').value = '';
   $('messageInput').style.height = 'auto';
-  if ($('imagePathInput')) $('imagePathInput').value = '';
   const imageToSend = attachedImage;
   removeImage();
 
@@ -433,7 +430,6 @@ async function sendInvestigation() {
   // Build form data
   const formData = new FormData();
   formData.append('text', text);
-  if (imagePath) formData.append('image_path', imagePath);
   if (imageToSend) {
     formData.append('image', imageToSend.file);
   }
@@ -684,13 +680,13 @@ function renderVerdict(consensus, technical, investigationId) {
     </div>
 
     <div class="tech-toggle">
-      <button class="tech-toggle-btn" onclick="toggleTechPanel(this)" aria-expanded="false">
+      <button class="tech-toggle-btn open" onclick="toggleTechPanel(this)" aria-expanded="true">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <polyline points="9 18 15 12 9 6"/>
         </svg>
-        View Technical Analysis
+        Hide Technical Analysis
       </button>
-      <div class="tech-panel" id="techPanel-${Date.now()}">
+      <div class="tech-panel visible" id="techPanel-${Date.now()}">
         ${buildTechPanel(technical, consensus)}
       </div>
     </div>
@@ -874,7 +870,9 @@ function toggleTechPanel(btn) {
   panel.classList.toggle('visible', !isOpen);
   btn.classList.toggle('open', !isOpen);
   btn.setAttribute('aria-expanded', !isOpen);
-  btn.querySelector('span') || (btn.lastChild.textContent = isOpen ? ' View Technical Analysis' : ' Hide Technical Analysis');
+  const label = isOpen ? ' View Technical Analysis' : ' Hide Technical Analysis';
+  const textNode = [...btn.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+  if (textNode) textNode.textContent = label;
 }
 
 function renderError(msg) {
