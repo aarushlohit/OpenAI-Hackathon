@@ -2,6 +2,12 @@
   "buildCommand": "cd frontend/react_app && npm install && npm run build",
   "outputDirectory": "frontend/react_app/dist",
   "rewrites": [
+    { "source": "/", "destination": "/api/index.py" },
+    { "source": "/app", "destination": "/api/index.py" },
+    { "source": "/login", "destination": "/api/index.py" },
+    { "source": "/signup", "destination": "/api/index.py" },
+    { "source": "/static/:path*", "destination": "/api/index.py" },
+    { "source": "/auth/:path*", "destination": "/api/index.py" },
     { "source": "/investigate", "destination": "/api/index.py" },
     { "source": "/health", "destination": "/api/index.py" },
     { "source": "/api/history", "destination": "/api/index.py" },

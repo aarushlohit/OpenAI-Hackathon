@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import Depends, FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,15 +29,22 @@ import agents.behavior_agent as behavior_agent
 import agents.osint_agent as osint_agent
 import agents.domain_agent as domain_agent
 import agents.consensus_agent as consensus_agent
+from auth.middleware import optional_user
+from auth.routes import router as auth_router
+from database.mongodb import ensure_indexes
 from providers import mongo_client, opencode_client, pollinations_client
+from security_headers import SecurityMiddleware, allowed_origins
 
 app = FastAPI(title="Detective Hermes Agent", version="2.0.0")
+app.include_router(auth_router)
+app.add_middleware(SecurityMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=sorted(allowed_origins()),
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=True,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -47,10 +54,18 @@ if (REACT_DIST_DIR / "assets").exists():
     app.mount("/assets", StaticFiles(directory=str(REACT_DIST_DIR / "assets")), name="react-assets")
 
 
+@app.on_event("startup")
+async def startup():
+    await ensure_indexes()
+
+
 @app.get("/", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse)
+@app.get("/signup", response_class=HTMLResponse)
+@app.get("/app", response_class=HTMLResponse)
 async def index():
     """Serve the main SPA."""
-    html_path = REACT_DIST_DIR / "index.html" if (REACT_DIST_DIR / "index.html").exists() else STATIC_DIR / "index.html"
+    html_path = STATIC_DIR / "index.html"
     return HTMLResponse(content=html_path.read_text(), status_code=200)
 
 
@@ -66,17 +81,23 @@ async def health():
 
 
 @app.get("/api/history")
-async def history():
-    return {"items": mongo_client.list_investigations()}
+async def history(user: dict[str, Any] | None = Depends(optional_user)):
+    if not user:
+        return {"items": []}
+    return {"items": mongo_client.list_investigations(user_id=user["id"])}
 
 
 @app.get("/api/reports")
-async def reports():
-    return {"items": mongo_client.list_reports()}
+async def reports(user: dict[str, Any] | None = Depends(optional_user)):
+    if not user:
+        return {"items": []}
+    return {"items": mongo_client.list_reports(user_id=user["id"])}
 
 
 @app.post("/api/reports")
-async def save_report(record: dict[str, Any]):
+async def save_report(record: dict[str, Any], user: dict[str, Any] | None = Depends(optional_user)):
+    if user:
+        record["user_id"] = user["id"]
     return mongo_client.save_report(record)
 
 
@@ -90,6 +111,8 @@ async def _run_investigation(
     image_bytes: bytes | None,
     mime_type: str,
     image_filename: str = "evidence.jpg",
+    image_path: str = "",
+    user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Core investigation pipeline — yields SSE events.
@@ -106,6 +129,18 @@ async def _run_investigation(
     # Step 1: Image OCR / extraction (optional). This runs first so image-only
     # evidence can still feed text, domain, and company analysis.
     if image_bytes:
+        if user_id:
+            await loop.run_in_executor(
+                None,
+                lambda: mongo_client.save_uploaded_metadata({
+                    "user_id": user_id,
+                    "case_id": investigation_id,
+                    "filename": image_filename,
+                    "mime_type": mime_type,
+                    "size_bytes": len(image_bytes),
+                    "image_path": image_path,
+                }),
+            )
         yield _sse("progress", {"step": "image", "message": "Launching Agent<ImageForensics>…"})
         yield _sse("progress", {"step": "image", "message": "Uploading image and extracting offer-letter text…"})
         try:
@@ -205,7 +240,15 @@ async def _run_investigation(
         "web": web_reputation_result,
         "opencode": opencode_result,
     }
-    record = _build_investigation_record(investigation_id, text, final_consensus, technical)
+    record = _build_investigation_record(
+        investigation_id,
+        text,
+        final_consensus,
+        technical,
+        user_id=user_id,
+        image_path=image_path,
+        image_filename=image_filename if image_bytes else "",
+    )
     storage = await loop.run_in_executor(None, lambda: mongo_client.save_investigation(record))
 
     yield _sse("verdict", {
@@ -230,6 +273,7 @@ async def investigate(
     text: str = Form(""),
     image: UploadFile | None = File(None),
     image_path: str = Form(""),
+    user: dict[str, Any] | None = Depends(optional_user),
 ):
     """
     Main investigation endpoint. Returns SSE stream.
@@ -258,7 +302,14 @@ async def investigate(
             )
 
     return StreamingResponse(
-        _run_investigation(text, image_bytes, mime_type, image_filename),
+        _run_investigation(
+            text,
+            image_bytes,
+            mime_type,
+            image_filename,
+            image_path=image_path.strip(),
+            user_id=user["id"] if user else None,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -358,6 +409,9 @@ def _build_investigation_record(
     text: str,
     consensus: dict[str, Any],
     technical: dict[str, Any],
+    user_id: str | None = None,
+    image_path: str = "",
+    image_filename: str = "",
 ) -> dict[str, Any]:
     company = (
         (technical.get("image") or {}).get("company_name")
@@ -367,6 +421,7 @@ def _build_investigation_record(
     )
     return {
         "id": investigation_id,
+        "user_id": user_id,
         "created_at": datetime_like_iso(),
         "title": consensus.get("headline") or consensus.get("verdict") or "Investigation",
         "company": company,
@@ -375,6 +430,14 @@ def _build_investigation_record(
         "recommendation": consensus.get("recommendation", ""),
         "summary": consensus.get("reasoning", ""),
         "input_preview": text[:500],
+        "input_text": text[:5000],
+        "image_path": image_path,
+        "image_filename": image_filename,
+        "provider": (
+            (technical.get("opencode") or {}).get("provider")
+            or (technical.get("web") or {}).get("provider")
+            or "hermes-agents"
+        ),
         "technical": technical,
     }
 

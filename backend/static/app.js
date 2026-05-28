@@ -16,6 +16,9 @@ const STORAGE_KEYS = {
   history: 'hermes.history.v1',
   saved: 'hermes.savedReports.v1',
   settings: 'hermes.settings.v1',
+  token: 'hermes.auth.token.v1',
+  user: 'hermes.auth.user.v1',
+  guest: 'hermes.auth.guest.v1',
 };
 
 // ── DOM refs ───────────────────────────────────────────────
@@ -23,12 +26,213 @@ const $ = (id) => document.getElementById(id);
 
 // ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  setupAuthForms();
+  bootRoute();
   setupTextarea();
   setupImageUpload();
   setupDragDrop();
   setupKeyboardShortcuts();
   checkHealth();
 });
+
+function authToken() {
+  return localStorage.getItem(STORAGE_KEYS.token) || '';
+}
+
+function currentUser() {
+  return getJson(STORAGE_KEYS.user, null);
+}
+
+function isGuestSession() {
+  return localStorage.getItem(STORAGE_KEYS.guest) === 'true';
+}
+
+function authHeaders() {
+  const token = authToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function apiFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...authHeaders(),
+    },
+  });
+}
+
+function setupAuthForms() {
+  $('loginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitAuth('/auth/login', {
+      email: $('loginEmail').value.trim(),
+      password: $('loginPassword').value,
+    }, 'loginStatus');
+  });
+
+  $('signupForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('signupPassword').value;
+    const confirm = $('signupConfirm').value;
+    if (password !== confirm) {
+      setAuthStatus('signupStatus', 'Passwords do not match.', true);
+      return;
+    }
+    await submitAuth('/auth/signup', {
+      name: $('signupName').value.trim(),
+      email: $('signupEmail').value.trim(),
+      password,
+    }, 'signupStatus');
+  });
+}
+
+async function submitAuth(url, payload, statusId) {
+  setAuthStatus(statusId, 'Preparing secure AI investigation session...');
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || 'Authentication failed');
+    persistSession(data);
+    showApp('/app');
+  } catch (err) {
+    setAuthStatus(statusId, err.message, true);
+  }
+}
+
+function setAuthStatus(id, message, isError = false) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = message;
+  el.classList.toggle('error', isError);
+}
+
+function persistSession(data) {
+  localStorage.setItem(STORAGE_KEYS.token, data.token);
+  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(data.user));
+  const settings = getJson(STORAGE_KEYS.settings, {});
+  if (data.user?.theme) {
+    settings.theme = data.user.theme;
+    setJson(STORAGE_KEYS.settings, settings);
+  }
+  localStorage.removeItem(STORAGE_KEYS.guest);
+  renderProfile();
+}
+
+function continueAsGuest() {
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.setItem(STORAGE_KEYS.guest, 'true');
+  showApp('/app');
+}
+
+function logout() {
+  if (authToken()) {
+    apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
+  }
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.removeItem(STORAGE_KEYS.guest);
+  showAuth('/login');
+}
+
+function navigateAuth(event, path) {
+  event.preventDefault();
+  showAuth(path);
+}
+
+async function bootRoute() {
+  const path = window.location.pathname;
+  const settings = getJson(STORAGE_KEYS.settings, { theme: 'light' });
+  document.documentElement.dataset.theme = settings.theme || 'light';
+  if (path === '/') {
+    showLanding();
+    return;
+  }
+  if (path === '/login' || path === '/signup') {
+    showAuth(path);
+    return;
+  }
+
+  if (authToken()) {
+    try {
+      const response = await apiFetch('/auth/me');
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(data.user));
+        showApp('/app');
+        return;
+      }
+    } catch {
+      // Fall through to login.
+    }
+    localStorage.removeItem(STORAGE_KEYS.token);
+    localStorage.removeItem(STORAGE_KEYS.user);
+  }
+
+  if (isGuestSession()) showApp('/app');
+  else showAuth('/login');
+}
+
+function showLanding() {
+  history.replaceState(null, '', '/');
+  $('landingScreen').style.display = 'block';
+  $('authScreen').style.display = 'none';
+  $('appShell').style.display = 'none';
+}
+
+function showAuth(path) {
+  history.replaceState(null, '', path);
+  $('landingScreen').style.display = 'none';
+  $('authScreen').style.display = 'flex';
+  $('appShell').style.display = 'none';
+  $('loginForm').style.display = path === '/signup' ? 'none' : 'flex';
+  $('signupForm').style.display = path === '/signup' ? 'flex' : 'none';
+}
+
+function showApp(path = '/app') {
+  history.replaceState(null, '', path);
+  $('landingScreen').style.display = 'none';
+  $('authScreen').style.display = 'none';
+  $('appShell').style.display = 'flex';
+  renderProfile();
+  refreshRemoteLists();
+}
+
+function renderProfile() {
+  const user = currentUser();
+  const name = user?.name || 'Guest investigator';
+  const email = user?.email || 'Local session';
+  $('profileName').textContent = name;
+  $('profileEmail').textContent = email;
+  $('profileAvatar').textContent = (name[0] || 'G').toUpperCase();
+  const settings = getJson(STORAGE_KEYS.settings, { theme: 'light' });
+  document.documentElement.dataset.theme = settings.theme || 'light';
+}
+
+async function refreshRemoteLists() {
+  if (!authToken()) return;
+  try {
+    const [historyResponse, reportsResponse] = await Promise.all([
+      apiFetch('/api/history'),
+      apiFetch('/api/reports'),
+    ]);
+    if (historyResponse.ok) {
+      const data = await historyResponse.json();
+      setJson(STORAGE_KEYS.history, data.items || []);
+    }
+    if (reportsResponse.ok) {
+      const data = await reportsResponse.json();
+      setJson(STORAGE_KEYS.saved, data.items || []);
+    }
+  } catch {
+    // Local cache remains available.
+  }
+}
 
 function setupTextarea() {
   const ta = $('messageInput');
@@ -161,28 +365,31 @@ function startNewInvestigation() {
 function showPlaceholder(name) {
   const map = {
     History: 'history',
+    'Investigation History': 'history',
     'Saved Reports': 'saved',
-    'Threat Feed': 'threat',
+    'Why Hermes': 'why',
     Settings: 'settings',
   };
   renderUtilityView(map[name] || 'history');
 }
 
-function renderUtilityView(view) {
+async function renderUtilityView(view) {
   showConversation();
   const mc = $('messagesContainer');
   mc.innerHTML = '';
   currentHermesMessageEl = null;
 
+  if (authToken()) await refreshRemoteLists();
+
   if (view === 'history') {
-    setActiveNav('History');
+    setActiveNav('Investigation History');
     mc.appendChild(renderHistoryView());
   } else if (view === 'saved') {
     setActiveNav('Saved Reports');
     mc.appendChild(renderSavedReportsView());
-  } else if (view === 'threat') {
-    setActiveNav('Threat Feed');
-    mc.appendChild(renderThreatFeedView());
+  } else if (view === 'why') {
+    setActiveNav('Why Hermes');
+    mc.appendChild(renderWhyHermesView());
   } else {
     setActiveNav('Settings');
     mc.appendChild(renderSettingsView());
@@ -233,7 +440,7 @@ async function sendInvestigation() {
 
   // Connect SSE
   try {
-    const response = await fetch('/investigate', {
+    const response = await apiFetch('/investigate', {
       method: 'POST',
       body: formData,
     });
@@ -294,7 +501,7 @@ function parseSSEEvent(raw) {
       break;
     case 'verdict':
       agentResults = { ...agentResults, ...data.technical };
-      renderVerdict(data.consensus, data.technical);
+      renderVerdict(data.consensus, data.technical, data.id);
       break;
     case 'error':
       renderError(data.message);
@@ -405,7 +612,7 @@ function markStepDone(stepId) {
   el.innerHTML = `<div class="step-check">✓</div><span>${label.replace('…', '')}</span>`;
 }
 
-function renderVerdict(consensus, technical) {
+function renderVerdict(consensus, technical, investigationId) {
   if (!currentHermesMessageEl) return;
 
   const content = currentHermesMessageEl.querySelector('.hermes-content');
@@ -414,7 +621,7 @@ function renderVerdict(consensus, technical) {
   const verdict = consensus.verdict || 'UNKNOWN';
   const tier = verdictTier(verdict);
   const confidence = consensus.confidence || 50;
-  currentReport = buildReportRecord(consensus, technical);
+  currentReport = buildReportRecord(consensus, technical, investigationId);
   addHistoryRecord(currentReport);
 
   // Build why_flagged list
@@ -679,15 +886,17 @@ function renderError(msg) {
 }
 
 // ── Utility Views ─────────────────────────────────────────
-function buildReportRecord(consensus, technical) {
+function buildReportRecord(consensus, technical, investigationId) {
   const company = technical?.image?.company_name
     || technical?.web?.company
     || technical?.opencode?.company
     || technical?.osint?.company_legitimacy
     || 'Unknown company';
   return {
-    id: `case-${Date.now()}`,
+    id: investigationId || `case-${Date.now()}`,
+    user_id: currentUser()?.id,
     createdAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
     title: consensus.headline || consensus.verdict || 'Investigation',
     company,
     verdict: consensus.verdict || 'UNKNOWN',
@@ -718,11 +927,18 @@ function addHistoryRecord(report) {
   setJson(STORAGE_KEYS.history, next);
 }
 
-function saveCurrentReport() {
+async function saveCurrentReport() {
   if (!currentReport) return;
   const saved = getJson(STORAGE_KEYS.saved, []);
   const next = [currentReport, ...saved.filter(item => item.id !== currentReport.id)].slice(0, 50);
   setJson(STORAGE_KEYS.saved, next);
+  if (authToken()) {
+    await apiFetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentReport),
+    }).catch(() => {});
+  }
   renderUtilityView('saved');
 }
 
@@ -738,12 +954,16 @@ function renderReportList(title, reports, emptyText) {
   const el = document.createElement('div');
   el.className = 'utility-panel';
   const rows = reports.map(report => renderReportRow(report)).join('');
+  const subtitle = authToken()
+    ? `${reports.length} MongoDB-backed case${reports.length === 1 ? '' : 's'}`
+    : `${reports.length} local guest case${reports.length === 1 ? '' : 's'}`;
   el.innerHTML = `
     <div class="utility-header">
       <div>
         <h2>${escapeHtml(title)}</h2>
-        <p>${reports.length} stored case${reports.length === 1 ? '' : 's'} in this browser</p>
+        <p>${subtitle}</p>
       </div>
+      <input class="history-search" type="search" placeholder="Search history" oninput="filterReportRows(this.value)" />
     </div>
     <div class="utility-list">${rows || `<div class="empty-state">${escapeHtml(emptyText)}</div>`}</div>
   `;
@@ -752,12 +972,18 @@ function renderReportList(title, reports, emptyText) {
 
 function renderReportRow(report) {
   const tier = verdictTier(report.verdict);
+  const created = report.createdAt || report.created_at || report.saved_at;
+  const summary = report.recommendation || report.summary || '';
   return `
-    <div class="report-row">
+    <div class="report-row" data-search="${escapeHtml([report.title, report.company, report.verdict, summary].join(' ').toLowerCase())}">
       <div>
         <div class="report-row-title">${escapeHtml(report.title)}</div>
-        <div class="report-row-meta">${escapeHtml(report.company)} · ${formatDate(report.createdAt)}</div>
-        ${report.recommendation ? `<div class="report-row-summary">${escapeHtml(report.recommendation)}</div>` : ''}
+        <div class="report-row-meta">${escapeHtml(report.company)} · ${formatDate(created)}</div>
+        ${summary ? `<div class="report-row-summary">${escapeHtml(summary)}</div>` : ''}
+        <div class="report-row-actions">
+          <button class="inline-action" onclick='openReport(${JSON.stringify(report).replace(/'/g, "&apos;")})'>Open</button>
+          <button class="inline-action" onclick='exportReport(${JSON.stringify(report).replace(/'/g, "&apos;")})'>Export</button>
+        </div>
       </div>
       <div class="report-row-side">
         <span class="verdict-badge badge-${tier}">${escapeHtml(report.verdict)}</span>
@@ -767,7 +993,53 @@ function renderReportRow(report) {
   `;
 }
 
-function renderThreatFeedView() {
+function filterReportRows(query) {
+  const q = String(query || '').toLowerCase();
+  document.querySelectorAll('.report-row').forEach(row => {
+    row.style.display = row.dataset.search.includes(q) ? 'flex' : 'none';
+  });
+}
+
+function openReport(report) {
+  showConversation();
+  const mc = $('messagesContainer');
+  mc.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'message hermes';
+  el.innerHTML = `
+    <div class="hermes-avatar"><div class="avatar-icon">DH</div><span class="avatar-name">Saved Report</span></div>
+    <div class="hermes-content">
+      <div class="verdict-card verdict-${verdictTier(report.verdict)}">
+        <div class="verdict-header">
+          <div>
+            <div class="verdict-badge badge-${verdictTier(report.verdict)}">${escapeHtml(report.verdict)}</div>
+            <div class="verdict-headline" style="margin-top:10px">${escapeHtml(report.title || report.company || 'Investigation')}</div>
+          </div>
+        </div>
+        <div class="verdict-body">
+          <div class="verdict-section">
+            <div class="verdict-section-title">Summary</div>
+            <div class="report-row-summary">${escapeHtml(report.summary || report.recommendation || 'No summary available.')}</div>
+          </div>
+          ${report.recommendation ? `<div class="verdict-section"><div class="verdict-section-title">Recommendation</div><div class="verdict-recommendation rec-${verdictTier(report.verdict)}">${escapeHtml(report.recommendation)}</div></div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  mc.appendChild(el);
+}
+
+function exportReport(report) {
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${report.id || 'hermes-report'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderWhyHermesView() {
   const history = getJson(STORAGE_KEYS.history, []);
   const signals = new Map();
   const domains = new Map();
@@ -802,9 +1074,14 @@ function renderThreatFeedView() {
   el.innerHTML = `
     <div class="utility-header">
       <div>
-        <h2>Threat Feed</h2>
-        <p>Signals aggregated from local investigation history</p>
+        <h2>Why Hermes</h2>
+        <p>AI-native investigation, persistent evidence, and public reputation context.</p>
       </div>
+    </div>
+    <div class="why-grid">
+      <section><strong>Authenticated workspace</strong><span>JWT sessions keep each investigator's reports scoped to their MongoDB account.</span></section>
+      <section><strong>Evidence-first analysis</strong><span>Offer text, uploaded images, domains, and public web reputation are preserved as report context.</span></section>
+      <section><strong>Production SaaS flow</strong><span>Signup, login, saved reports, export, and searchable case history are available from the same workspace.</span></section>
     </div>
     <div class="feed-grid">
       <section>
@@ -821,14 +1098,15 @@ function renderThreatFeedView() {
 }
 
 function renderSettingsView() {
-  const settings = getJson(STORAGE_KEYS.settings, { keepHistory: true });
+  const settings = getJson(STORAGE_KEYS.settings, { keepHistory: true, theme: 'light' });
+  const user = currentUser();
   const el = document.createElement('div');
   el.className = 'utility-panel';
   el.innerHTML = `
     <div class="utility-header">
       <div>
         <h2>Settings</h2>
-        <p>Local workspace controls</p>
+        <p>${user ? escapeHtml(user.email) : 'Guest workspace controls'}</p>
       </div>
     </div>
     <div class="settings-list">
@@ -841,9 +1119,13 @@ function renderSettingsView() {
       </label>
       <div class="setting-row">
         <span>
-          <strong>OpenCode model</strong>
-          <small>Backend default: opencode/deepseek-v4-flash-free</small>
+          <strong>Theme</strong>
+          <small>Switch between premium dark and warm light mode.</small>
         </span>
+        <select onchange="updateTheme(this.value)">
+          <option value="light" ${settings.theme !== 'dark' ? 'selected' : ''}>Light</option>
+          <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
+        </select>
       </div>
       <div class="setting-row">
         <span>
@@ -861,6 +1143,21 @@ function updateSetting(key, value) {
   const settings = getJson(STORAGE_KEYS.settings, {});
   settings[key] = value;
   setJson(STORAGE_KEYS.settings, settings);
+}
+
+function updateTheme(theme) {
+  updateSetting('theme', theme);
+  document.documentElement.dataset.theme = theme;
+  const user = currentUser();
+  if (user) {
+    user.theme = theme;
+    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+    apiFetch('/auth/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme }),
+    }).catch(() => {});
+  }
 }
 
 function clearLocalData() {

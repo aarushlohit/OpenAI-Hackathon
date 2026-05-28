@@ -45,12 +45,13 @@ def save_investigation(record: dict[str, Any]) -> dict[str, Any]:
     return {"stored": True, "id": doc["id"]}
 
 
-def list_investigations(limit: int = 50) -> list[dict[str, Any]]:
+def list_investigations(limit: int = 50, user_id: str | None = None) -> list[dict[str, Any]]:
     collection = _collection("investigations")
     if collection is None:
         return []
 
-    docs = collection.find({}, {"_id": False}).sort("created_at", -1).limit(limit)
+    query = {"user_id": user_id} if user_id else {}
+    docs = collection.find(query, {"_id": False}).sort("created_at", -1).limit(limit)
     return list(docs)
 
 
@@ -65,10 +66,22 @@ def save_report(record: dict[str, Any]) -> dict[str, Any]:
     return {"stored": True, "id": doc["id"]}
 
 
-def list_reports(limit: int = 50) -> list[dict[str, Any]]:
+def list_reports(limit: int = 50, user_id: str | None = None) -> list[dict[str, Any]]:
     collection = _collection("saved_reports")
     if collection is None:
         return []
 
-    docs = collection.find({}, {"_id": False}).sort("saved_at", -1).limit(limit)
+    query = {"user_id": user_id} if user_id else {}
+    docs = collection.find(query, {"_id": False}).sort("saved_at", -1).limit(limit)
     return list(docs)
+
+
+def save_uploaded_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    collection = _collection("uploaded_metadata")
+    if collection is None:
+        return {"stored": False, "reason": "mongodb_not_configured"}
+
+    doc = dict(record)
+    doc.setdefault("created_at", datetime.now(UTC).isoformat())
+    collection.insert_one(doc)
+    return {"stored": True}
