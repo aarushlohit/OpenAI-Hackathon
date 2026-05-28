@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Search, History as HistoryIcon, Bookmark, ShieldAlert, Settings as SettingsIcon, Image as ImageIcon, Send, X, Shield, Activity, Globe, Eye } from 'lucide-react';
 import './styles.css';
 
 const STORAGE = {
@@ -163,7 +164,7 @@ function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">DH</span>
+          <div className="brand-mark"><Shield size={24} /></div>
           <span>
             Detective Hermes
             <small>Agentic fraud lab</small>
@@ -194,13 +195,17 @@ function App() {
           {imagePreview && (
             <div className="preview">
               <img src={imagePreview} alt="Attached evidence" />
-              <button onClick={() => onImage(null)}>Remove</button>
+              <button onClick={() => onImage(null)}><X size={16} /></button>
             </div>
           )}
           <div className="composer">
             <textarea
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => {
+                setText(event.target.value);
+                event.target.style.height = 'auto';
+                event.target.style.height = Math.min(event.target.scrollHeight, 200) + 'px';
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
@@ -208,13 +213,18 @@ function App() {
                 }
               }}
               placeholder="Paste recruiter text, offer details, suspicious URLs, or attach an offer-letter image"
+              rows={1}
             />
-            <div className="actions">
-              <label title="Attach image">
-                Image
-                <input type="file" accept="image/*" onChange={(event) => onImage(event.target.files?.[0] || null)} />
-              </label>
-              <button disabled={isRunning} onClick={investigate}>{isRunning ? 'Running' : 'Investigate'}</button>
+            <div className="composer-bottom">
+              <div className="actions">
+                <label title="Attach image">
+                  <ImageIcon size={20} />
+                  <input type="file" accept="image/*" onChange={(event) => onImage(event.target.files?.[0] || null)} />
+                </label>
+              </div>
+              <button className="send-btn" disabled={isRunning || (!text.trim() && !imageFile && !imagePath.trim())} onClick={investigate}>
+                {isRunning ? '...' : <Send size={18} />}
+              </button>
             </div>
             <input
               className="path-input"
@@ -230,20 +240,26 @@ function App() {
 }
 
 function Nav({ view, setView }) {
-  const items = [['new', 'New Investigation'], ['history', 'History'], ['saved', 'Saved Reports'], ['feed', 'Threat Feed'], ['settings', 'Settings']];
-  return <nav>{items.map(([id, label]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>{label}</button>)}</nav>;
+  const items = [
+    ['new', 'New Investigation', <Search size={18} />],
+    ['history', 'History', <HistoryIcon size={18} />],
+    ['saved', 'Saved Reports', <Bookmark size={18} />],
+    ['feed', 'Threat Feed', <ShieldAlert size={18} />],
+    ['settings', 'Settings', <SettingsIcon size={18} />]
+  ];
+  return <nav>{items.map(([id, label, icon]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>{icon} {label}</button>)}</nav>;
 }
 
 function InvestigationView({ messages, progress, technical, verdict, onSave }) {
   if (!messages.length) return (
     <div className="welcome">
-      <div className="hero-kicker">Detective Hermes Agent</div>
+      <div className="hero-kicker"><ShieldAlert size={14} /> Detective Hermes Agent</div>
       <h1>Offer-letter forensics with live reputation intelligence.</h1>
       <p>Upload an offer image or paste recruiter text. Hermes extracts the company, launches specialist agents, searches Glassdoor, AmbitionBox, Reddit, and public scam reports, then produces an evidence-backed verdict.</p>
       <div className="hero-grid">
-        <div><strong>Vision OCR</strong><span>Pollinations image extraction</span></div>
-        <div><strong>Web OSINT</strong><span>Glassdoor, AmbitionBox, Reddit</span></div>
-        <div><strong>Deep Review</strong><span>OpenCode API synthesis</span></div>
+        <div><strong><ImageIcon size={18} style={{marginBottom: 4, color: 'var(--accent)'}} /> Vision OCR</strong><span>Pollinations image extraction</span></div>
+        <div><strong><Globe size={18} style={{marginBottom: 4, color: 'var(--success)'}} /> Web OSINT</strong><span>Glassdoor, AmbitionBox, Reddit</span></div>
+        <div><strong><Activity size={18} style={{marginBottom: 4, color: 'var(--warning)'}} /> Deep Review</strong><span>OpenCode API synthesis</span></div>
       </div>
     </div>
   );

@@ -5,10 +5,10 @@
 
 :root {
   --bg-primary: #f7f4ed;
-  --bg-secondary: #fffaf2;
+  --bg-secondary: var(--bg-secondary);
   --bg-sidebar: #f2ecdf;
-  --bg-card: #fffaf2;
-  --bg-input: #fffaf2;
+  --bg-card: var(--bg-secondary);
+  --bg-input: var(--bg-secondary);
   --bg-hover: #efe6d8;
 
   --border: #ded4c4;
@@ -224,7 +224,7 @@ html, body {
   background:
     radial-gradient(circle at 16% 10%, rgba(217,119,6,0.18), transparent 26%),
     radial-gradient(circle at 84% 18%, rgba(245,158,11,0.10), transparent 24%),
-    linear-gradient(180deg, #fffaf2 0%, #f8f3ea 48%, #efe5d6 100%);
+    linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 48%, var(--bg-hover) 100%);
 }
 
 .landing-nav {
@@ -330,8 +330,8 @@ html, body {
 .hero-panel {
   border: 1px solid var(--border-subtle);
   background:
-    linear-gradient(180deg, rgba(255,250,242,0.94), rgba(255,247,235,0.82)),
-    rgba(255,250,242,0.74);
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) calc(0.94 * 100%), transparent), color-mix(in srgb, var(--bg-secondary) calc(0.82 * 100%), transparent)),
+    color-mix(in srgb, var(--bg-card) calc(0.74 * 100%), transparent);
   border-radius: 24px;
   padding: 20px;
   box-shadow: 0 34px 90px rgba(68,48,22,0.16);
@@ -349,7 +349,7 @@ html, body {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #d8cbbb;
+  background: var(--border-subtle);
 }
 
 .hero-verdict-row {
@@ -407,7 +407,7 @@ html, body {
 .landing-grid article,
 .security-strip {
   border: 1px solid var(--border-subtle);
-  background: rgba(255,250,242,0.78);
+  background: color-mix(in srgb, var(--bg-card) calc(0.78 * 100%), transparent);
   border-radius: 20px;
   padding: 24px;
   box-shadow: 0 18px 44px rgba(68,48,22,0.09);
@@ -451,7 +451,7 @@ html, body {
   padding: 28px;
   border: 1px solid var(--border-subtle);
   border-radius: 24px;
-  background: linear-gradient(135deg, rgba(255,250,242,0.90), rgba(245,158,11,0.08));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) calc(0.90 * 100%), transparent), rgba(245,158,11,0.08));
   box-shadow: 0 18px 44px rgba(68,48,22,0.09);
 }
 
@@ -504,7 +504,7 @@ html, body {
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  background: rgba(242,236,223,0.88);
+  background: color-mix(in srgb, var(--bg-sidebar) calc(0.88 * 100%), transparent);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -534,7 +534,7 @@ html, body {
   padding: 12px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  background: rgba(255,250,242,0.74);
+  background: color-mix(in srgb, var(--bg-card) calc(0.74 * 100%), transparent);
   box-shadow: 0 10px 24px rgba(68,48,22,0.05);
 }
 
@@ -700,7 +700,7 @@ html, body {
   position: relative;
   overflow: hidden;
   min-height: 0;
-  background: linear-gradient(180deg, rgba(255,250,242,0.52), rgba(247,244,237,0));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) calc(0.52 * 100%), transparent), color-mix(in srgb, var(--bg-primary) calc(0 * 100%), transparent));
 }
 
 /* ── WELCOME VIEW ───────────────────────────────────────── */
@@ -784,7 +784,7 @@ html, body {
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  background: rgba(255,250,242,0.78);
+  background: color-mix(in srgb, var(--bg-card) calc(0.78 * 100%), transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   box-shadow: 0 14px 30px rgba(68,48,22,0.06);
@@ -837,7 +837,7 @@ html, body {
 }
 
 .user-bubble {
-  background: #fffaf2;
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 18px 18px 4px 18px;
   padding: 12px 16px;
@@ -904,7 +904,7 @@ html, body {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: rgba(255,250,242,0.74);
+  background: color-mix(in srgb, var(--bg-card) calc(0.74 * 100%), transparent);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-size: 13.5px;
@@ -962,7 +962,7 @@ html, body {
   border: 1px solid var(--border-subtle);
   overflow: hidden;
   margin-top: 4px;
-  background: rgba(255,250,242,0.82);
+  background: color-mix(in srgb, var(--bg-card) calc(0.82 * 100%), transparent);
   box-shadow: 0 18px 50px rgba(68,48,22,0.08);
 }
 
@@ -1050,7 +1050,7 @@ html, body {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--border-subtle);
-  background: rgba(232,222,206,0.45);
+  background: color-mix(in srgb, var(--border) calc(0.45 * 100%), transparent);
 }
 
 .report-actions {
@@ -1172,7 +1172,7 @@ html, body {
 .tech-panel {
   display: none;
   margin-top: 10px;
-  background: rgba(255,250,242,0.86);
+  background: color-mix(in srgb, var(--bg-card) calc(0.86 * 100%), transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 18px;
   overflow: hidden;
@@ -1239,7 +1239,7 @@ html, body {
   left: 0;
   right: 0;
   padding: 18px 24px 24px;
-  background: linear-gradient(to top, rgba(247,244,237,0.96) 70%, rgba(247,244,237,0));
+  background: linear-gradient(to top, color-mix(in srgb, var(--bg-primary) calc(0.96 * 100%), transparent) 70%, color-mix(in srgb, var(--bg-primary) calc(0 * 100%), transparent));
   pointer-events: none;
 }
 
@@ -1284,7 +1284,7 @@ html, body {
 
 /* Composer */
 .composer {
-  background: rgba(255,250,242,0.96);
+  background: color-mix(in srgb, var(--bg-card) calc(0.96 * 100%), transparent);
   border: 1px solid rgba(217,119,6,0.18);
   border-radius: 18px;
   transition: border-color 0.2s;
