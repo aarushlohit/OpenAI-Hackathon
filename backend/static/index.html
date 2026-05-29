@@ -282,24 +282,39 @@
       <!-- INPUT AREA -->
       <div class="input-area" id="inputArea">
         <div class="input-wrapper">
-          <!-- Image preview -->
-          <div class="image-preview" id="imagePreview" style="display:none">
-            <img id="previewImg" src="" alt="Attached image" />
-            <button class="remove-image" onclick="removeImage()" aria-label="Remove image">✕</button>
-          </div>
-
-          <!-- Audio preview -->
-          <div class="audio-preview" id="audioPreview" style="display:none">
-            <div class="audio-preview-content">
-              <svg class="preview-audio-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-              <span id="audioPreviewName">Selected audio file</span>
+          <!-- Attachment previews row -->
+          <div class="attachments-row" id="attachmentsRow">
+            <!-- Image preview -->
+            <div class="image-preview" id="imagePreview" style="display:none">
+              <img id="previewImg" src="" alt="Attached image" />
+              <button class="remove-image" onclick="removeImage()" aria-label="Remove image">✕</button>
             </div>
-            <button class="remove-audio" onclick="removeAudio()" aria-label="Remove audio">✕</button>
+
+            <!-- PDF preview pill -->
+            <div class="pdf-preview" id="pdfPreview" style="display:none">
+              <div class="pdf-preview-content">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span id="pdfPreviewName">document.pdf</span>
+              </div>
+              <button class="remove-pdf" onclick="removePdf()" aria-label="Remove PDF">✕</button>
+            </div>
+
+            <!-- Audio preview pill -->
+            <div class="audio-preview" id="audioPreview" style="display:none">
+              <div class="audio-preview-content">
+                <svg class="preview-audio-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <span id="audioPreviewName">audio.mp3</span>
+              </div>
+              <button class="remove-audio" onclick="removeAudio()" aria-label="Remove audio">✕</button>
+            </div>
           </div>
 
           <div class="composer">
@@ -312,7 +327,8 @@
               ></textarea>
 
               <div class="composer-actions">
-                <label class="action-btn" for="imageUpload" title="Attach image" aria-label="Upload image">
+                <!-- Image upload -->
+                <label class="action-btn" for="imageUpload" title="Attach image (JPG, PNG, WEBP)" aria-label="Upload image">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -321,7 +337,20 @@
                   <input type="file" id="imageUpload" accept="image/*" style="display:none" />
                 </label>
 
-                <label class="action-btn" for="audioUpload" title="Attach audio transcript (MP3/WAV/M4A/MP4)" aria-label="Upload audio">
+                <!-- PDF upload -->
+                <label class="action-btn" for="pdfUpload" title="Attach PDF offer letter" aria-label="Upload PDF">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  <input type="file" id="pdfUpload" accept="application/pdf,.pdf" style="display:none" />
+                </label>
+
+                <!-- Audio upload -->
+                <label class="action-btn" for="audioUpload" title="Attach audio (MP3/WAV/M4A)" aria-label="Upload audio">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -341,7 +370,7 @@
             </div>
           </div>
 
-          <div class="input-hint">Attach an image, audio clip, or paste recruiter text. Hermes extracts evidence, launches agents, and shows the technical trail.</div>
+          <div class="input-hint">Attach an image 🖼, PDF offer letter 📄, or audio recording 🎙 — combine all three. Hermes launches 6 specialist agents and shows the full evidence trail.</div>
         </div>
       </div>
 
@@ -356,7 +385,7 @@
         <line x1="12" y1="12" x2="12" y2="21"/>
         <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
       </svg>
-      <p>Drop your image here</p>
+      <p>Drop image or PDF here</p>
     </div>
   </div>
 

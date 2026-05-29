@@ -365,19 +365,21 @@ _PDF_MIME_TYPES = {"application/pdf", "application/x-pdf"}
 async def investigate(
     text: str = Form(""),
     image: UploadFile | None = File(None),
+    pdf: UploadFile | None = File(None),
     image_path: str = Form(""),
     audio: UploadFile | None = File(None),
     user: dict[str, Any] | None = Depends(optional_user),
 ):
     """
     Main investigation endpoint. Returns SSE stream.
-    Accepts text, optional image/PDF upload, and optional audio upload.
+    Accepts text, optional image upload, optional PDF upload (separate field),
+    and optional audio upload. All three can be submitted simultaneously.
 
     PDF uploads are converted page-by-page to PNG images and processed via
     the NVIDIA Nemotron OCR endpoint (with NVCF Asset API for large pages).
     Single images are handled by the Pollinations vision pipeline.
     """
-    if not text.strip() and image is None and not image_path.strip() and audio is None:
+    if not text.strip() and image is None and pdf is None and not image_path.strip() and audio is None:
         return StreamingResponse(
             iter([_sse("error", {"message": "Please provide text, an image, a PDF, or an audio file to investigate."})]),
             media_type="text/event-stream",
@@ -388,11 +390,17 @@ async def investigate(
     image_filename = "evidence.jpg"
     is_pdf = False
 
-    if image is not None:
+    # PDF field takes priority for the OCR pipeline
+    if pdf is not None:
+        image_bytes = await pdf.read()
+        mime_type = pdf.content_type or "application/pdf"
+        image_filename = pdf.filename or "document.pdf"
+        is_pdf = True
+    elif image is not None:
         image_bytes = await image.read()
         mime_type = image.content_type or "image/jpeg"
         image_filename = image.filename or image_filename
-        # Detect PDF by MIME type or file extension
+        # Detect PDF by MIME type or file extension (legacy fallback)
         is_pdf = (
             mime_type in _PDF_MIME_TYPES
             or (image_filename or "").lower().endswith(".pdf")
@@ -434,6 +442,7 @@ async def investigate(
             "X-Accel-Buffering": "no",
         },
     )
+
 
 
 def _merge_text_audio_and_image_extraction(text: str, audio_transcript: str | None, image_analysis: dict | None) -> str:

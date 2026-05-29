@@ -2,9 +2,12 @@
 PDF → page images → OCR → combined text pipeline.
 
 Strategy:
-  • Uses PyMuPDF (fitz) to render each PDF page as a high-DPI PNG in memory.
+  • Uses PyMuPDF (fitz) to render each PDF page as a JPEG in memory.
+  • JPEG is used instead of PNG — it compresses text-heavy offer letters
+    ~8x better, keeping most pages under the 180 KB inline base64 limit
+    without needing the NVCF Asset API.
   • Sends each page image to the Nemotron OCR provider (which automatically
-    handles large pages via the NVCF Asset API).
+    handles unusually large pages via the NVCF Asset API as a fallback).
   • Joins all page transcripts into a single document string.
 
 No temporary files are written to disk; everything is held in memory.
@@ -30,9 +33,13 @@ except ModuleNotFoundError:
 
 log = logging.getLogger(__name__)
 
-# Render resolution.  150 DPI is a good balance: ~1240×1754 px for A4,
-# produces clean glyphs for OCR while keeping file sizes reasonable.
-DEFAULT_DPI = int(150)
+# Render resolution. 100 DPI gives a good balance of OCR quality vs file size
+# for A4 text documents. JPEG at 100 DPI ≈ 80–150 KB for typical offer letters,
+# well within the 180 KB inline limit for Nemotron OCR.
+DEFAULT_DPI = int(100)
+
+# JPEG quality setting (85 is visually lossless for text at 100 DPI)
+JPEG_QUALITY = 85
 
 # Maximum pages to OCR (guard against huge files at a hackathon demo)
 MAX_PAGES = int(30)
@@ -40,7 +47,7 @@ MAX_PAGES = int(30)
 
 def pdf_to_page_images(pdf_bytes: bytes, dpi: int = DEFAULT_DPI) -> list[bytes]:
     """
-    Render *pdf_bytes* to a list of PNG byte strings (one per page).
+    Render *pdf_bytes* to a list of JPEG byte strings (one per page).
 
     Raises ValueError for encrypted/corrupt PDFs.
     """
@@ -59,9 +66,12 @@ def pdf_to_page_images(pdf_bytes: bytes, dpi: int = DEFAULT_DPI) -> list[bytes]:
     for page_num in range(page_count):
         page = doc[page_num]
         pix = page.get_pixmap(matrix=matrix, alpha=False)
-        png_bytes = pix.tobytes("png")
-        images.append(png_bytes)
-        log.debug("Rendered PDF page %d/%d  (%d bytes)", page_num + 1, page_count, len(png_bytes))
+        jpeg_bytes = pix.tobytes("jpg", jpg_quality=JPEG_QUALITY)
+        images.append(jpeg_bytes)
+        log.debug(
+            "Rendered PDF page %d/%d  (%d KB JPEG)",
+            page_num + 1, page_count, len(jpeg_bytes) // 1024,
+        )
 
     doc.close()
     return images
@@ -79,7 +89,7 @@ def ocr_pdf(
     ----------
     pdf_bytes   : raw PDF file contents
     progress_cb : optional callback(current_page, total_pages) for streaming
-    dpi         : render resolution (default 150)
+    dpi         : render resolution (default 100)
 
     Returns
     -------
@@ -95,11 +105,12 @@ def ocr_pdf(
     page_texts: list[str] = []
     errors: list[str] = []
 
-    for idx, png_bytes in enumerate(page_images):
+    for idx, jpeg_bytes in enumerate(page_images):
         if progress_cb:
             progress_cb(idx + 1, total)
         try:
-            text = ocr_image(png_bytes, mime_type="image/png")
+            # Send as JPEG — smaller payload, widely supported by Nemotron OCR
+            text = ocr_image(jpeg_bytes, mime_type="image/jpeg")
             page_texts.append(text.strip())
         except RuntimeError as exc:
             err_msg = f"Page {idx + 1} OCR failed: {exc}"
@@ -119,3 +130,4 @@ def ocr_pdf(
         "errors": errors,
         "provider": "nvidia/nemotron-ocr-v1",
     }
+

@@ -1300,6 +1300,50 @@ html, body {
 }
 .remove-image:hover { background: var(--critical); color: white; }
 
+/* Attachments row — holds image, pdf, audio previews side-by-side */
+.attachments-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* PDF preview pill — same shape as audio preview */
+.pdf-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.pdf-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.remove-pdf {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+.remove-pdf:hover { color: var(--critical); }
+
 /* Audio preview */
 .audio-preview {
   display: flex;

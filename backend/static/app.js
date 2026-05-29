@@ -7,6 +7,7 @@
 
 // ── State ──────────────────────────────────────────────────
 let attachedImage = null; // { file, dataUrl, mimeType }
+let attachedPdf   = null; // { file, name, size }
 let attachedAudio = null; // { file, name, size }
 let isInvestigating = false;
 let currentHermesMessageEl = null;
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bootRoute();
   setupTextarea();
   setupImageUpload();
+  setupPdfUpload();
   setupAudioUpload();
   setupDragDrop();
   setupKeyboardShortcuts();
@@ -260,6 +262,14 @@ function setupImageUpload() {
   });
 }
 
+function setupPdfUpload() {
+  const input = $('pdfUpload');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    if (input.files[0]) attachImageFile(input.files[0]);
+  });
+}
+
 function setupAudioUpload() {
   const input = $('audioUpload');
   if (!input) return;
@@ -310,12 +320,14 @@ function setupDragDrop() {
     dragDepth = 0;
     overlay.classList.remove('active');
     const file = e.dataTransfer?.files[0];
-    if (file && file.type.startsWith('image/')) attachImageFile(file);
+    if (file && file.type === 'application/pdf') attachPdfFile(file);
+    else if (file && file.type.startsWith('image/')) attachImageFile(file);
   });
 }
 
 function attachImageFile(file) {
   const reader = new FileReader();
+
   reader.onload = (e) => {
     attachedImage = { file, dataUrl: e.target.result, mimeType: file.type };
     $('previewImg').src = e.target.result;
@@ -329,6 +341,30 @@ function removeImage() {
   $('imagePreview').style.display = 'none';
   $('imageUpload').value = '';
   $('previewImg').src = '';
+}
+
+function setupPdfUpload() {
+  const input = $('pdfUpload');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    if (input.files[0]) attachPdfFile(input.files[0]);
+  });
+}
+
+function attachPdfFile(file) {
+  attachedPdf = { file, name: file.name, size: file.size };
+  const nameEl = $('pdfPreviewName');
+  if (nameEl) nameEl.textContent = `${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  const previewEl = $('pdfPreview');
+  if (previewEl) previewEl.style.display = 'flex';
+}
+
+function removePdf() {
+  attachedPdf = null;
+  const previewEl = $('pdfPreview');
+  if (previewEl) previewEl.style.display = 'none';
+  const input = $('pdfUpload');
+  if (input) input.value = '';
 }
 
 // ── Health Check ───────────────────────────────────────────
@@ -380,6 +416,8 @@ function startNewInvestigation() {
   $('messageInput').value = '';
   $('messageInput').style.height = 'auto';
   removeImage();
+  removePdf();
+  removeAudio();
   agentResults = {};
   currentHermesMessageEl = null;
   currentReport = null;
@@ -431,7 +469,7 @@ async function sendInvestigation() {
   if (isInvestigating) return;
 
   const text = $('messageInput').value.trim();
-  if (!text && !attachedImage && !attachedAudio) return;
+  if (!text && !attachedImage && !attachedPdf && !attachedAudio) return;
 
   isInvestigating = true;
   $('sendBtn').disabled = true;
@@ -441,25 +479,30 @@ async function sendInvestigation() {
   showConversation();
 
   // Render user message
-  renderUserMessage(text, attachedImage?.dataUrl, attachedAudio?.name);
+  renderUserMessage(text, attachedImage?.dataUrl, attachedPdf?.name, attachedAudio?.name);
 
   // Clear input
   $('messageInput').value = '';
   $('messageInput').style.height = 'auto';
   const imageToSend = attachedImage;
+  const pdfToSend   = attachedPdf;
   const audioToSend = attachedAudio;
   removeImage();
+  removePdf();
   removeAudio();
 
   // Start hermes message with progress steps
   agentResults = {};
   currentHermesMessageEl = renderHermesProgress();
 
-  // Build form data
+  // Build form data — image, pdf, and audio are independent fields
   const formData = new FormData();
   formData.append('text', text);
   if (imageToSend) {
     formData.append('image', imageToSend.file);
+  }
+  if (pdfToSend) {
+    formData.append('pdf', pdfToSend.file);
   }
   if (audioToSend) {
     formData.append('audio', audioToSend.file);
@@ -541,22 +584,35 @@ function parseSSEEvent(raw) {
 }
 
 // ── Render helpers ─────────────────────────────────────────
-function renderUserMessage(text, imageDataUrl, audioName) {
+function renderUserMessage(text, imageDataUrl, pdfName, audioName) {
   const mc = $('messagesContainer');
   const el = document.createElement('div');
   el.className = 'message user';
 
   let html = '';
   if (text) html += `<div class="user-bubble">${escapeHtml(text)}</div>`;
-  if (imageDataUrl) html += `<img class="user-image" src="${imageDataUrl}" alt="Attached image" />`;
+  if (imageDataUrl) {
+    html += `<img class="user-image" src="${imageDataUrl}" alt="Attached image" />`;
+  }
+  if (pdfName) {
+    html += `
+      <div class="user-audio-attachment" style="margin-top:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;color:var(--accent)">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <span>${escapeHtml(pdfName)}</span>
+      </div>
+    `;
+  }
   if (audioName) {
     html += `
       <div class="user-audio-attachment">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle; color: var(--primary);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;color:var(--accent)">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
           <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
+          <line x1="8" y1="23" x1="16" y2="23"/>
         </svg>
         <span>${escapeHtml(audioName)}</span>
       </div>
@@ -567,6 +623,7 @@ function renderUserMessage(text, imageDataUrl, audioName) {
   mc.appendChild(el);
   scrollToBottom();
 }
+
 
 function renderHermesProgress() {
   const mc = $('messagesContainer');
