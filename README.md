@@ -2,212 +2,122 @@ Hermes Detective Agent
 
 AI-Powered Recruitment Fraud Investigation Assistant
 
-Overview
+Hermes Detective Agent is an AI-powered cybersecurity platform that helps students and job seekers identify recruitment scams before they become victims.
 
-Hermes Detective Agent is an AI-powered cybersecurity assistant designed to help students, job seekers, and early-career professionals identify suspicious internship and job opportunities before becoming victims of scams.
+Instead of manually researching recruiters, domains, onboarding processes, offer letters, and suspicious messages, users can simply upload evidence or describe the situation in natural language.
 
-The platform investigates recruiter messages, onboarding workflows, screenshots, offer letters, PDFs, images, and suspicious domains using autonomous AI investigation agents and multimodal reasoning.
-
-Instead of asking users to understand cybersecurity concepts, Hermes answers a simple question:
-
-"Can I trust this opportunity?"
+Hermes investigates the opportunity, analyzes risk signals, validates trust indicators, and delivers an explainable verdict within seconds.
 
 ---
 
-The Problem
+Why Hermes Exists
 
-Recruitment scams are rapidly increasing across:
+Every year, thousands of students lose money, personal information, and valuable opportunities to recruitment scams.
 
-- LinkedIn
-- Telegram
-- WhatsApp
-- Fake HR portals
-- Phishing onboarding websites
-
-Common attack patterns include:
+Fraudsters use:
 
 - Fake recruiters
+- Telegram and WhatsApp onboarding
 - Refundable onboarding fees
-- Telegram-only hiring processes
-- Fake offer letters
 - Impersonated company websites
-- Phishing domains
-- Identity theft attempts
+- Fake offer letters
+- Phishing portals
 
-Students often lack the technical expertise needed to investigate these opportunities.
+Most victims are not cybersecurity experts.
 
----
+Hermes was built to bridge that gap.
 
-The Solution
+Our goal is simple:
 
-Hermes Detective Agent acts as an AI-powered recruitment fraud investigator.
+Help users answer one critical question before they commit their time, money, or personal information.
 
-Users can:
-
-- Paste recruiter messages
-- Upload screenshots
-- Analyze suspicious domains
-- Upload offer letters
-- Investigate PDFs
-- Submit onboarding instructions
-
-The system investigates the evidence and produces:
-
-- Risk Score
-- Confidence Score
-- Threat Indicators
-- Explainable Verdict
-- Recommended Actions
+«"Can I trust this opportunity?"»
 
 ---
 
-Features
+What Hermes Can Investigate
 
-Recruitment Scam Detection
+Hermes supports multimodal investigations across multiple evidence types:
 
-Detects:
+Text Investigations
 
-- Fake internships
-- Fake job offers
-- Payment coercion scams
-- Telegram onboarding scams
-- Recruiter impersonation
-- Domain spoofing attacks
-- Social engineering tactics
+- Recruiter conversations
+- Internship offers
+- Job descriptions
+- Onboarding instructions
 
-Multimodal Investigations
+Image Investigations
 
-Supports:
-
-- Text
-- Images
 - Screenshots
-- PDFs
-- Offer Letters
-- Domains and URLs
+- Chat conversations
+- Recruitment advertisements
+- Suspicious onboarding portals
 
-Explainable AI
+Document Investigations
 
-Provides:
+- PDF offer letters
+- Internship agreements
+- Company documents
+- HR communications
 
-- Risk assessment
-- Investigation reasoning
-- Confidence score
-- Supporting evidence
-- Recommended actions
+Domain Investigations
 
-Domain Intelligence
-
-Identifies:
-
-- Typo-squatting attacks
-- Phishing domains
-- Fake company portals
-- Brand impersonation
+- Company websites
+- Onboarding links
+- Phishing portals
+- Suspicious URLs
 
 ---
 
-Architecture
+How Hermes Works
 
-Frontend
-
-- React.js
-- Responsive conversational interface
-- Evidence upload support
-- Modern AI assistant experience
-
-Mobile
-
-- Flutter
-- Cross-platform deployment
-- Shared API integration
-
-Backend
-
-- FastAPI
-- Python
-- REST APIs
-- Modular agent architecture
-
-AI Models
-
-NVIDIA NIM
-
-Model:
-"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-
-Used for:
-
-- Investigation reasoning
-- Risk analysis
-- Verdict generation
-- Consensus evaluation
-
-Pollinations AI
-
-Used for:
-
-- Image analysis
-- Screenshot understanding
-- Multimodal investigations
-
----
-
-Investigation Agents
+Hermes uses multiple specialized AI investigation agents.
 
 Behavior Analysis Agent
 
-Detects:
+Identifies:
 
-- Urgency tactics
-- Emotional manipulation
-- Payment requests
-- Suspicious onboarding behavior
+- urgency tactics
+- emotional manipulation
+- onboarding coercion
+- payment requests
 
 OSINT Intelligence Agent
 
-Verifies:
+Validates:
 
-- Company legitimacy
-- Recruiter claims
-- Public trust indicators
+- company legitimacy
+- recruiter claims
+- public reputation
+- trust indicators
 
 Domain Intelligence Agent
 
 Detects:
 
-- Typo-squatting
-- Fake company domains
-- Phishing infrastructure
-- Brand impersonation
+- phishing domains
+- typo-squatting attacks
+- fake onboarding portals
+- impersonation attempts
 
-Consensus Agent
+Consensus Investigation Agent
 
-Combines:
-
-- Behavioral analysis
-- OSINT intelligence
-- Domain validation
-- AI reasoning
-
-to generate the final verdict.
+Combines findings from all agents and generates the final explainable verdict.
 
 ---
 
 Example Investigation
 
-Input
+User Input
 
-Telegram recruiter requests a refundable onboarding payment and provides a link to:
+"Congratulations. You have been selected for an internship. To confirm onboarding, pay a refundable security deposit of ₹3500 through UPI. Visit onboard.googles.xyz."
 
-onboard.googles.xyz
-
-Investigation Findings
+Hermes Findings
 
 - Payment requested before onboarding
-- Telegram-only communication
-- Typo-squatted domain
-- Brand impersonation detected
+- Telegram-based hiring workflow
+- Fake Google impersonation domain
+- Multiple fraud indicators detected
 
 Verdict
 
@@ -215,136 +125,55 @@ Risk Level: Critical
 
 Confidence: High
 
-Recommendation:
-Do not proceed. Verify through official company channels.
+Recommendation: Do not proceed. Verify the opportunity through official company channels.
 
 ---
 
 Technology Stack
 
-Frontend:
+Frontend
 
 - React.js
+- Modern conversational AI interface
 
-Mobile:
+Mobile
 
 - Flutter
 
-Backend:
+Backend
 
 - FastAPI
 - Python
 
-AI:
+AI Layer
 
-- NVIDIA NIM
+- NVIDIA NIM (Nemotron Omni Reasoning)
 - Pollinations AI
 
-Infrastructure:
+Infrastructure
 
 - Docker
 - REST APIs
-- JSON Workflows
 
 ---
 
-Local Setup
+Key Features
 
-Clone Repository
-
-git clone <repository-url>
-cd hermes-detective-agent
-
-Install Dependencies
-
-pip install -r requirements.txt
-
-Configure Environment
-
-Create ".env"
-
-NVIDIA_API_KEY=your_key
-POLLINATIONS_API_KEY=your_key
-
-Run Backend
-
-uvicorn main:app --reload
-
-Run Frontend
-
-npm install
-npm run dev
-
-Run Flutter App
-
-flutter pub get
-flutter run
-
----
-
-Demo Scenarios
-
-Safe Opportunity
-
-Input:
-
-Interview through careers.google.com with no onboarding payment.
-
-Expected Result:
-
-Low Risk
-
-Suspicious Opportunity
-
-Input:
-
-Telegram onboarding with refundable UPI payment.
-
-Expected Result:
-
-High Risk
-
-Impersonation Attack
-
-Input:
-
-onboard.googles.xyz
-
-Expected Result:
-
-Critical Risk
-
----
-
-Future Roadmap
-
-- Browser Extension
-- LinkedIn Scam Detection
-- Email Investigation
-- Enterprise HR Verification
-- Real-Time Threat Intelligence
-- Mobile Store Deployment
-
----
-
-Hackathon Submission
-
-Project:
-Hermes Detective Agent
-
-Category:
-AI Cybersecurity / Trust & Safety
-
-Built During:
-AI Builders Hackathon
-
-Core Technologies:
-React, Flutter, FastAPI, NVIDIA NIM, Pollinations AI, Python
+- AI-powered scam investigations
+- Recruitment fraud detection
+- Explainable verdicts
+- Domain trust analysis
+- Multimodal evidence processing
+- Image and PDF analysis
+- Real-time risk assessment
+- Conversational user experience
 
 ---
 
 Vision
 
-Hermes Detective Agent aims to become the AI cybersecurity detective for the global hiring ecosystem.
+Hermes Detective Agent aims to become the trusted AI cybersecurity companion for students and job seekers worldwide.
 
-Our mission is to help students and job seekers confidently evaluate opportunities before investing their time, money, or personal information.
+By combining AI reasoning, fraud intelligence, and explainable investigations, Hermes helps users make safer and more informed career decisions.
+
+Investigate first. Trust later.
