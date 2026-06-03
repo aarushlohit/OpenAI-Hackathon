@@ -1,406 +1,350 @@
-# Hermes-X
+Hermes Detective Agent
 
-> **Autonomous Cyber Investigation Runtime** — recruitment fraud intelligence at SOC-grade speed.
+AI-Powered Recruitment Fraud Investigation Assistant
 
-Hermes-X investigates fake internships, recruiter impersonation, phishing portals, forged offer letters, Telegram onboarding scams, and coordinated payment campaigns using a fully autonomous, event-sourced pipeline.
+Overview
 
----
+Hermes Detective Agent is an AI-powered cybersecurity assistant designed to help students, job seekers, and early-career professionals identify suspicious internship and job opportunities before becoming victims of scams.
 
-## System Doctrine
+The platform investigates recruiter messages, onboarding workflows, screenshots, offer letters, PDFs, images, and suspicious domains using autonomous AI investigation agents and multimodal reasoning.
 
-```
-Events define reality.
-Replay reconstructs cognition.
-Graphs project intelligence.
-Evidence drives escalation.
-Providers reason within governed runtime boundaries.
-PostgreSQL stores immutable truth.
-Redis coordinates realtime cognition.
-The runtime—not the model—is the system.
-```
+Instead of asking users to understand cybersecurity concepts, Hermes answers a simple question:
+
+"Can I trust this opportunity?"
 
 ---
 
-## Architecture
+The Problem
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Flutter SOC Dashboard                        │
-│  Severity Meter │ Story Timeline │ Explainability Panel         │
-│  Threat Graph   │ Replay Console │ Observability Panel          │
-└────────────────────────┬────────────────────────────────────────┘
-                         │  WebSocket + REST
-┌────────────────────────▼────────────────────────────────────────┐
-│                     FastAPI Runtime                             │
-│  POST /v1/investigate → correlation_id                          │
-│  ws://localhost:8000/v1/ws/investigations/{id}                  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │  Typed Events
-┌────────────────────────▼────────────────────────────────────────┐
-│                 InvestigationOrchestrator                       │
-│  IntakeAgent → [Behavior│OSINT│Vision│Graph] → RiskSynthesis    │
-└──────────┬──────────────────────────────────────┬──────────────┘
-           │  Gateway (capability routing)         │  Event Bus
-┌──────────▼──────────────┐             ┌──────────▼──────────────┐
-│  AI Provider Tier        │             │  Append-Only Event Store │
-│  Primary: OpenAI         │             │  PostgreSQL              │
-│  Fallback: Nemotron Omni │             │  Redis realtime fanout   │
-│  Last resort: Pollinations│            │  Replay + Snapshots      │
-└─────────────────────────┘             └─────────────────────────┘
-```
+Recruitment scams are rapidly increasing across:
 
-### Replay Model
+- LinkedIn
+- Telegram
+- WhatsApp
+- Fake HR portals
+- Phishing onboarding websites
 
-```
-Operator Input
-    │
-    ▼
-EventEnvelope (append-only) ──► ReplayFrame ──► Snapshot fingerprint
-    │                                               │
-    ▼                                               ▼
-Graph events ──► Deterministic projection ──► graph_hash verified
-```
+Common attack patterns include:
 
-PostgreSQL stores immutable truth. Redis coordinates realtime fanout.  
-Replay reconstructs investigations without re-running agents.
+- Fake recruiters
+- Refundable onboarding fees
+- Telegram-only hiring processes
+- Fake offer letters
+- Impersonated company websites
+- Phishing domains
+- Identity theft attempts
 
-### Provider Routing
-
-| Modality   | Primary      | Fallback        | Last Resort  |
-|------------|-------------|-----------------|-------------|
-| Text       | OpenAI      | Nemotron Omni   | Pollinations |
-| Vision     | OpenAI      | Nemotron Omni   | Pollinations |
-| Audio      | OpenAI      | Nemotron Omni   | —           |
-| Embeddings | OpenAI      | Pollinations    | —           |
-
-**Invocation logging:**
-```
-[OPENAI]      Invoking model: gpt-4.1-mini
-[NVIDIA]      Invoking model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-[POLLINATIONS] Entering degraded fallback mode
-```
+Students often lack the technical expertise needed to investigate these opportunities.
 
 ---
 
-## ⚡ Live Cognition Validation
+The Solution
 
-**Prove Hermes-X Reasons with REAL AI** — Not a fake heuristic wrapper around pattern matching.
+Hermes Detective Agent acts as an AI-powered recruitment fraud investigator.
 
-### Single Command Validation
+Users can:
 
-```bash
-# Verify real NVIDIA cognition + hybrid verdict synthesis + provider attribution
-python scripts/live_cognition_validation.py
-```
+- Paste recruiter messages
+- Upload screenshots
+- Analyze suspicious domains
+- Upload offer letters
+- Investigate PDFs
+- Submit onboarding instructions
 
-**Output**: Live execution trace showing:
-- ✅ Real NVIDIA Nemotron invocation with latency metrics
-- ✅ BehaviorAgent detecting payment_coercion, urgen cy_pressure, channel restrictions
-- ✅ OSINTAgent detecting domain anomalies, phishing infrastructure
-- ✅ Deterministic validation confirming AI findings
-- ✅ Cross-agent consensus reaching 100% agreement
-- ✅ Hybrid verdict synthesis from 3 layers (AI + deterministic + consensus)
-- ✅ Provider attribution truthful (shows actual providers, no fake models)
-- ✅ Replay snapshots persisted to PostgreSQL
-- ✅ Threat graph intelligence mapped
+The system investigates the evidence and produces:
 
-### Benchmark Against Real Scams
-
-```bash
-# Measure accuracy across 20 real cases (10 scams + 10 legitimate offers)
-python scripts/benchmark_dataset.py
-```
-
-**Metrics**:
-- Accuracy: >85% ✓
-- Precision: >90% ✓
-- Recall: >90% (catches real scams) ✓
-- F1 Score: >0.88 ✓
-- Latency: ~140ms per investigation
-- Throughput: ~7 investigations/second
-
-### Full Guide
-
-See [LIVE_COGNITION_GUIDE.md](LIVE_COGNITION_GUIDE.md) for:
-- Step-by-step live validation
-- Provider failure scenario testing
-- Real-time behavior monitoring
-- Accuracy metric interpretation
-- Production readiness checklist
+- Risk Score
+- Confidence Score
+- Threat Indicators
+- Explainable Verdict
+- Recommended Actions
 
 ---
 
-## 🎯 Full Multimodal AI Proof
+Features
 
-**FINAL AUTHENTICITY VALIDATION** — Hermes-X is powered by real AI reasoning, not fake heuristics.
+Recruitment Scam Detection
 
-### Single Command Multimodal Test
+Detects:
 
-```bash
-# Prove real NVIDIA cognition across TEXT + IMAGE + PDF + AUDIO
-python scripts/full_multimodal_ai_validation.py
-```
+- Fake internships
+- Fake job offers
+- Payment coercion scams
+- Telegram onboarding scams
+- Recruiter impersonation
+- Domain spoofing attacks
+- Social engineering tactics
 
-**What This Proves**:
-- ✅ Text reasoning: Payment coercion detection (84/100 risk, 94% conf)
-- ✅ Image reasoning: Telegram screenshot + payment extraction (93% conf)
-- ✅ PDF reasoning: Forged offer letter detection (98% forgery confidence)
-- ✅ Audio reasoning: Coercive tone + payment extraction (96% confidence)
-- ✅ Parallel orchestration: 4 agents working in consensus (95% agreement)
-- ✅ Deterministic validation: 3/3 rule-based checks confirmed
-- ✅ Hybrid verdict synthesis: 3-layer decision (AI + deterministic + consensus)
-- ✅ Replay persistence: Investigation snapshot reproducible
-- ✅ Graph intelligence: Campaign correlation detected
-- ✅ Provider attribution: NVIDIA Nemotron Omni truthfully attributed
+Multimodal Investigations
 
-### Expected Output
+Supports:
 
-**Real-time trace showing NVIDIA cognition across all modalities**:
+- Text
+- Images
+- Screenshots
+- PDFs
+- Offer Letters
+- Domains and URLs
 
-```
-[TEXT INVESTIGATION]
-[BEHAVIOR] Model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-  Risk Score: 84/100 (94% confidence)
-  Signals: payment_coercion (CRITICAL), telegram_impersonation (HIGH), urgency_pressure (HIGH)
+Explainable AI
 
-[IMAGE INVESTIGATION]
-[VISION] Model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-  Artifacts: payment_screenshot (93%), telegram_interface (91%), upi_instruction (96%)
+Provides:
 
-[PDF INVESTIGATION]
-[PDF] Model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-  Indicators: payment_in_offer (98%), branding_inconsistency (87%)
+- Risk assessment
+- Investigation reasoning
+- Confidence score
+- Supporting evidence
+- Recommended actions
 
-[AUDIO INVESTIGATION]
-[AUDIO] Model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-  Signals: payment_extraction (96%), urgency_tone (89%), coercive_language (88%)
+Domain Intelligence
 
-[FINAL VERDICT]
-  Score: 87/100
-  Confidence: 91%
-  Severity: CRITICAL
-  Source: hybrid_correlation (AI + deterministic + consensus)
-```
+Identifies:
 
-### Multimodal Architecture
-
-```
-TEXT (84/100) ──┐
-IMAGE (93%) ──┬─► ORCHESTRATOR ──► Consensus 95% ──► Verdict 87/100
-PDF (98%) ───┤                    3 layers:          Severity CRITICAL
-AUDIO (96%) ──┤ Deterministic      • AI cognition     Source: hybrid_
-              │ Validator         • Rule validation
-              │ 3/3 checks        • Cross-agent
-              └─► CONFIRMED         consensus
-```
-
-### Complete Documentation
-
-See [MULTIMODAL_AI_PROOF.md](MULTIMODAL_AI_PROOF.md) for:
-- Full technical architecture walkthrough
-- Signal attribution model (ai_reasoned | deterministic | hybrid)
-- Evidence persistence and replay verification
-- Provider failover chain verification
-- Production readiness matrix
-- FAQ and comparison (before vs after multimodal)
+- Typo-squatting attacks
+- Phishing domains
+- Fake company portals
+- Brand impersonation
 
 ---
 
-## Quickstart
+Architecture
 
-### 1. Configure
+Frontend
 
-```bash
-cp .env.example .env
-# Add OPENAI_API_KEY and NVIDIA_NIM_API_KEY
-```
+- React.js
+- Responsive conversational interface
+- Evidence upload support
+- Modern AI assistant experience
 
-### 2. Boot Runtime (Docker)
+Mobile
 
-```bash
-docker compose up --build
-```
+- Flutter
+- Cross-platform deployment
+- Shared API integration
 
-Expected services: `api`, `postgres`, `redis` (neo4j optional)
+Backend
 
-### 3. Validate Runtime
+- FastAPI
+- Python
+- REST APIs
+- Modular agent architecture
 
-```bash
-python scripts/final_runtime_validation.py --json
-```
+AI Models
 
-Expected:
-```json
-{
-  "ready": true,
-  "status": {
-    "postgres": "healthy",
-    "redis": "healthy",
-    "providers": "healthy",
-    "replay": "healthy",
-    "websocket": "healthy",
-    "graph": "healthy"
-  }
-}
-```
+NVIDIA NIM
 
-### 4. Run Demo Investigation
+Model:
+"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 
-```bash
-./scripts/demo_mode.sh telegram_onboarding_scam
-```
+Used for:
 
-Available scenarios:
-```
-telegram_onboarding_scam   — Payment coercion + Telegram onboarding
-fake_internship_portal     — Phishing portal with payment gate
-forged_offer_letter        — HR impersonation + document extraction
-recruiter_impersonation    — Brand impersonation + urgency
-coordinated_campaign       — Cross-domain campaign correlation
-fake_portal_attack         — FAANG impersonation + credential harvest
-```
+- Investigation reasoning
+- Risk analysis
+- Verdict generation
+- Consensus evaluation
 
-Expected output:
-```
-Severity: high
-Score: 66
-Factors: payment_coercion, telegram_only_onboarding, osint_reputation_low, …
-```
+Pollinations AI
 
-### 4b. Test With Custom Input
+Used for:
 
-**Interactive investigation** — paste any suspicious recruiter message:
+- Image analysis
+- Screenshot understanding
+- Multimodal investigations
 
-```bash
-python scripts/custom_investigation.py
-```
+---
 
-**Example input**:
-```
-Telegram HR from @careerfastjob asks refundable onboarding payment of 3500 
-via UPI pay@upi and asks onboarding through Telegram only. No official email.
-```
+Investigation Agents
 
-**JSON output** for integration:
+Behavior Analysis Agent
 
-```bash
-python scripts/custom_investigation.py --json
-```
+Detects:
 
-**5 pre-built test cases** with expected verdicts:
+- Urgency tactics
+- Emotional manipulation
+- Payment requests
+- Suspicious onboarding behavior
 
-```bash
-# View test cases and expected results
-cat CUSTOM_INVESTIGATION_GUIDE.md
-```
+OSINT Intelligence Agent
 
-**See**: [INTERACTIVE_TESTING.md](INTERACTIVE_TESTING.md) for complete testing reference, batch processing, and integration patterns.
+Verifies:
 
-Expected result for example above:
-```
-⚠️ HIGH THREAT (Score: 78/100, Confidence: 84%)
-  • Behavioral Analysis: payment_extraction, non_official_channel, payment_coercion (CRITICAL)
-  • OSINT Analysis: telegram_impersonation detected
-  • Deterministic Validation: ✓ CONFIRMED (2 checks passed)
-  • Cross-Agent Consensus: ✓ REACHED (100% — 2/2 agents agreed)
-  • Verdict Source: hybrid_correlation (AI + Deterministic + Consensus)
-```
+- Company legitimacy
+- Recruiter claims
+- Public trust indicators
 
-### 5. Start Flutter SOC Dashboard
+Domain Intelligence Agent
 
-```bash
-cd frontend/flutter_app
+Detects:
+
+- Typo-squatting
+- Fake company domains
+- Phishing infrastructure
+- Brand impersonation
+
+Consensus Agent
+
+Combines:
+
+- Behavioral analysis
+- OSINT intelligence
+- Domain validation
+- AI reasoning
+
+to generate the final verdict.
+
+---
+
+Example Investigation
+
+Input
+
+Telegram recruiter requests a refundable onboarding payment and provides a link to:
+
+onboard.googles.xyz
+
+Investigation Findings
+
+- Payment requested before onboarding
+- Telegram-only communication
+- Typo-squatted domain
+- Brand impersonation detected
+
+Verdict
+
+Risk Level: Critical
+
+Confidence: High
+
+Recommendation:
+Do not proceed. Verify through official company channels.
+
+---
+
+Technology Stack
+
+Frontend:
+
+- React.js
+
+Mobile:
+
+- Flutter
+
+Backend:
+
+- FastAPI
+- Python
+
+AI:
+
+- NVIDIA NIM
+- Pollinations AI
+
+Infrastructure:
+
+- Docker
+- REST APIs
+- JSON Workflows
+
+---
+
+Local Setup
+
+Clone Repository
+
+git clone <repository-url>
+cd hermes-detective-agent
+
+Install Dependencies
+
+pip install -r requirements.txt
+
+Configure Environment
+
+Create ".env"
+
+NVIDIA_API_KEY=your_key
+POLLINATIONS_API_KEY=your_key
+
+Run Backend
+
+uvicorn main:app --reload
+
+Run Frontend
+
+npm install
+npm run dev
+
+Run Flutter App
+
 flutter pub get
-flutter analyze   # → No issues found
-flutter test      # → All tests passed
-flutter run -d linux
-```
-
-Dashboard features:
-- **Severity Meter** — animated score with pulsing alert on high/critical
-- **Investigation Story Mode** — numbered narrative of every agent action
-- **Explainability Panel** — which evidence, which provider, which relationship
-- **Threat Graph** — force-directed animated graph with severity coloring
-- **Observability Panel** — live WS throughput, failover count, graph metrics
-- **Replay Console** — step-through reconstruction with speed control
-- **Provider Failover Badge** — animated "FAILOVER → NEMOTRON OMNI" banner
-
-### 6. API Documentation
-
-[http://localhost:8000/docs](http://localhost:8000/docs)
+flutter run
 
 ---
 
-## WebSocket Event Stream
+Demo Scenarios
 
-```
-POST /v1/investigate → { "correlation_id": "INV-..." }
-ws://localhost:8000/v1/ws/investigations/{correlation_id}
-```
+Safe Opportunity
 
-Event types:
-| Event | Description |
-|---|---|
-| `investigation_started` | Pipeline boot |
-| `agent_progress` | Agent reasoning step |
-| `graph_node_added` | New entity in threat graph |
-| `graph_edge_added` | New relationship in threat graph |
-| `threat_escalated` | Evidence threshold crossed |
-| `provider_failed` | Failover to Nemotron Omni |
-| `investigation_completed` | Final verdict + score |
-| `replay_verified` | Deterministic reconstruction confirmed |
+Input:
 
----
+Interview through careers.google.com with no onboarding payment.
 
-## Structure
+Expected Result:
 
-```
-.
-├── app/
-│   ├── agents/          # IntakeAgent, InvestigationOrchestrator
-│   ├── api/             # FastAPI transport, websocket fanout
-│   ├── core/            # Settings, DI container, config
-│   ├── events/          # EventEnvelope, async event bus
-│   ├── gateway/         # Provider capability registry + adapters
-│   │   └── providers/   # OpenAI, NVIDIA NIM, Pollinations
-│   ├── graph/           # Deterministic graph projection
-│   ├── models/          # ThreatScore, EvidenceSignal, BehaviorResult
-│   ├── scoring/         # Evidence-weighted ThreatScoringEngine
-│   └── terminal/        # Rich/Typer operator CLI
-├── frontend/flutter_app/ # Flutter SOC Dashboard
-│   ├── lib/dashboard/   # 3-column layout, severity meter
-│   ├── lib/features/    # Investigation, graph, replay, explainability
-│   └── lib/graph/       # Animated force-directed GraphCanvas
-├── scripts/
-│   ├── demo_mode.sh            # Cinematic scenario launcher
-│   ├── final_runtime_validation.py
-│   └── validate_live_providers.py
-├── hermes.py            # CLI entrypoint
-├── main.py              # FastAPI ASGI entrypoint
-└── docker-compose.yml
-```
+Low Risk
+
+Suspicious Opportunity
+
+Input:
+
+Telegram onboarding with refundable UPI payment.
+
+Expected Result:
+
+High Risk
+
+Impersonation Attack
+
+Input:
+
+onboard.googles.xyz
+
+Expected Result:
+
+Critical Risk
 
 ---
 
-## Architecture Guardrails
+Future Roadmap
 
-- Agents **never** call providers directly — all AI access goes through capability routers.
-- Every AI invocation logs `[OPENAI/NVIDIA/POLLINATIONS] Invoking model: …`
-- Inputs and AI outputs are schema-validated before agents process them.
-- Secrets stay in environment-backed settings; never passed to agents.
-- Components communicate through structured, append-only events.
-- Replay is **deterministic** — no model re-invocation during reconstruction.
+- Browser Extension
+- LinkedIn Scam Detection
+- Email Investigation
+- Enterprise HR Verification
+- Real-Time Threat Intelligence
+- Mobile Store Deployment
 
 ---
 
-## Live Investigation Result (Demo)
+Hackathon Submission
 
-```
-Investigation: INV-837C1EDF
-Risk: HIGH
-Score: 66
-Verdict: HIGH RISK — evidence includes payment_coercion, telegram_only_onboarding,
-         osint_reputation_low, scarcity_tactics, recruiter_impersonation.
-Graph: 3 nodes (domain, telegram, upi) | 3 edges
-Replay: VERIFIED (deterministic)
-```
+Project:
+Hermes Detective Agent
+
+Category:
+AI Cybersecurity / Trust & Safety
+
+Built During:
+AI Builders Hackathon
+
+Core Technologies:
+React, Flutter, FastAPI, NVIDIA NIM, Pollinations AI, Python
+
+---
+
+Vision
+
+Hermes Detective Agent aims to become the AI cybersecurity detective for the global hiring ecosystem.
+
+Our mission is to help students and job seekers confidently evaluate opportunities before investing their time, money, or personal information.
